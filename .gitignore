@@ -1,0 +1,12 @@
+# Build directory
+/build
+
+# Any test file
+test.*
+
+# IDE support
+compile_flags.txt
+.idea
+
+# Other
+/doc/todo

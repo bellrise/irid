@@ -1,0 +1,147 @@
+Irid architecture
+=================
+
+Irid is a 16-bit architecture with a simple instruction layout. The instruction
+itself only takes 8 bits, for 255 unique instructions which is more than enough.
+Any bytes after that are just data. For example, the basic `mov` instruction
+takes a value in a register and copies it into a location in memory, or the other
+way around. One byte is used for `mov`, one for the register ID (for a max of 255
+registers), and two bytes for the address (each address takes 16 bits).
+
+
+Registers
+---------
+
+r0, r1, r2, r3, r4, r5, r6, r7  General purpose registers (16 bit)
+h0, h1, h2, h3, l0, l1, l2, l3  Half registers (8 bit)
+ip, sp, bp                      Instruction pointer, stack pointer, base pointer
+cf, zf, of                      Compare flag, zero flag, overflow flag
+
+
+The 8 general purpose registers may be used freely to store data, and in
+instructions that take a register as a parameter. The 3 pointer registers are
+used by the "cpu" and the push/pop, call & ret instructions.
+
+There are 8 half registers, which are each 8 bits wide. There are made for
+single byte stack operations. These registers are actually part of the general
+registers, which means the r0 register can be accessed using h0 or l0. Registers
+prefixed with h contain the high byte (the first byte), and l the low byte.
+
+Because this is a little-endian architecture, the general registers store the
+number the other way around. For example, mov'ing 0x5511 into r0 will set h0
+to 0x11 and l0 to 0x55.
+
+The instruction pointer (ip) points to the currently executed instruction in
+memory. If this is modified, the program will jump to the address ip points to
+and start executing code there. This may cause a instruction fault, so it is not
+recommended to change it by hand, using rather the jmp/call/ret instruction
+group.
+
+The compare flag (cf), the zero flag (zf), and the overflow flag (of) are all
+1 bit wide, storing the result of a comparison, null check or an integer
+overflow.
+
+Instruction set
+---------------
+
+* Stack operations
+    - push [rx/hx/imm8/imm16]
+        Push a register/immediate onto the stack, decrementing the stack
+        pointer.
+    - pop [rx/hx]
+        Pop a value off the stack into a register.
+
+* Memory/register operations
+    - mov [rx/hx] [rz/hz/imm8/imm16]
+        Move a register/immediate into the register.
+    - load [rx/hx] [addr]
+        Load a value from memory pointed by [addr] to a register.
+    - store [rx/hx] [addr]
+        Store a value from a register into memory pointed by [addr].
+    - null [rx/hx]
+        Set a register to 0.
+
+* Comparison operations
+    - cmp [rx] [rz/imm8/imm16]
+        Compare the value stored in a register to another register or
+        an immediate. If the comparison succeeds, the carry flag is set.
+    - cmg [rx] [rz/imm8/imm16]
+        See if the value in the register is greater than the register or
+        immediate. If the comparison succeeds, the carry flag is set.
+
+* Program control
+    - jmp [addr]
+        Unconditionally jump to the given address.
+    - jnz [rx] [addr]
+        Jump to the given address, if [rx] is not zero.
+    - jcs [rx] [addr]
+        Jump to the given address, if the compare flag is set.
+    - call [addr]
+        Jump to the given address, pushing r0-r5, sp, bp & ip on the stack to
+        be able to return to the previous function.
+    - ret
+        Return from a function, popping some data off the stack.
+    - cpucall
+        Let the CPU execute a function specified by the r0 register. See the
+        "CPU call" section.
+
+* Integer operations
+    - add [rx] [rz/imm8/imm16]
+        Add an immediate or register to a register.
+    - sub [rx] [rz/imm8/imm16]
+        Subtract an immediate or register from a register.
+    - and [rx] [rz/imm8/imm16]
+        Logical AND two registers, storing the result in [rx].
+    - or [rx] [rz/imm8/imm16]
+        Logical OR two registers, storing the result in [rx].
+    - not [rx]
+        Logical NOT a register.
+    - shr [rx] [rz/imm8]
+        Shift a value in the register right, filling with zeroes.
+    - shl [rx] [rz/imm8]
+        Shift a value in the register left, filling with zeroes.
+
+
+Memory layout
+-------------
+
+On launch, the CPU creates a memory layout with areas for restricted memory,
+which you can only read from. You may later change some of these areas using
+a cpucall. Because this is a 16-bit architecture, there are 64kB of memory.
+All memory is split into 64 pages, each being 1kB (1024 or 2^10 bytes) in size.
+
+    0x0000 - 0xf3ff     User memory
+    0xf400 - 0xfbff     Text mode video memory
+    0xfc00 - 0xffff     CPU page, read-only
+
+Any attempt to write to the CPU page will result in a segmentation fault,
+crashing the CPU.
+
+CPU call
+--------
+
+When the program runs the `cpucall` instruction, the CPU will read the r0
+register to identify what function must it run before it returns to the program.
+Using a CPU call you can map memory to a certain device or shut down the CPU.
+All parameters are passed in the general registers, starting from r0.
+
+0x10
+Shut down the CPU. This will stop execution immediately.
+
+0x11
+Restart the CPU, resetting all registers, memory and instruction pointer to 0.
+Both the base & stack pointer are set to 0xffff, so if the user tries to use the
+stack before specifying a stack a segfault will happen.
+
+0x12    [ptr]
+Get a device list.
+
+0x13    [mode] [width] [height]
+Change video mode. The mode can be either CPUCALL_VMOD_TXT or CPUCALL_VMOD_PIX.
+For text mode, no width or height is required.
+
+0x14    [addr]
+Set segmentation fault handler. The address points to a function, which would
+be the error handler, throwing/printing some message to the screen. In order
+to provide more information, the instruction pointer is stored into the r0
+register.

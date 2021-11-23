@@ -1,0 +1,7 @@
+Irid
+====
+
+Irid is a custom, 16-bit architecture built for fun and learning purposes. This
+project has a special emulator built-in, which will create a X11 window to draw
+the pixels set by any software that's running on the emulator, written using the
+Irid instruction set.

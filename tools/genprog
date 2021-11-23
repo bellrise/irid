@@ -1,0 +1,11 @@
+#!/usr/bin/python3
+
+# Generate a program that can be loaded into the emulator.
+
+# push16 0x1122
+# cpucall shutdown
+sprog = b'\x12\x11\x22' \
+        b'\x01\x10'
+
+with open('test.bin', 'wb') as f:
+    f.write(sprog)
