@@ -117,6 +117,7 @@ All memory is split into 64 pages, each being 1kB (1024 or 2^10 bytes) in size.
 Any attempt to write to the CPU page will result in a segmentation fault,
 crashing the CPU.
 
+
 CPU call
 --------
 

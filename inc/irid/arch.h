@@ -6,6 +6,10 @@
 
 #include <stdint.h>
 
+#define IRID_PAGE_SIZE          0x0400
+#define IRID_MAX_ADDR           0xffff
+#define IRID_MAX_PAGES          (IRID_MAX_ADDR + 1) / IRID_PAGE_SIZE
+
 /* Register IDs. In the instruction format, registers are represented using
    a single byte. */
 #define R_R0                    0x00
@@ -17,13 +21,13 @@
 #define R_R6                    0x06
 #define R_R7                    0x07
 #define R_H0                    0x10
-#define R_L0                    0x20
-#define R_H1                    0x11
-#define R_L1                    0x21
-#define R_H2                    0x12
-#define R_L2                    0x22
-#define R_H3                    0x13
-#define R_L3                    0x23
+#define R_L0                    0x11
+#define R_H1                    0x12
+#define R_L1                    0x13
+#define R_H2                    0x14
+#define R_L2                    0x15
+#define R_H3                    0x16
+#define R_L3                    0x17
 #define R_IP                    0x70
 #define R_SP                    0x71
 #define R_BP                    0x72
@@ -79,6 +83,7 @@
 #define CPUCALL_RESTART         0x11
 #define CPUCALL_LISTDEVS        0x12
 #define CPUCALL_VMOD            0x13
+#define CPUCALL_FAULT           0x14
 
 /* Visual mode of the CPU. You can set this using the CPUCALL_VMOD function.
    If the text mode is enabled, the screen is rendered as a 80*25 character map,
@@ -88,36 +93,42 @@
 #define CPUCALL_VMOD_TXT        0x01
 #define CPUCALL_VMOD_PIX        0x02
 
+/* CPU fault IDs. Each possible CPU fault has a corresponding 8-bit number,
+   which can be used to identify the problem. */
+#define CPUFAULT_SEG            0x01
+#define CPUFAULT_IO             0x02
+
 /* Irid regular int & half int. All full 16-bit registers use the rint type
    instead of the iint type, because the signed bit needs to be ignored. */
-typedef short           iint;
-typedef unsigned short  rint;
-typedef unsigned char   hint;
+typedef short           ir_sword;
+typedef unsigned short  ir_word;
+typedef unsigned char   ir_half;
 
-#define _irid_join_register(ID) union { rint r##ID; struct {        \
-    hint    h##ID;                                                  \
-    hint    l##ID;                                                  \
+#define _irid_join_register(ID) union { ir_word r##ID; struct {             \
+    ir_half    h##ID;                                                       \
+    ir_half    l##ID;                                                       \
 }; }
 
-/* Irid register set. */
+/* Irid register set. Note that the placement is intentional. */
 struct irid_reg
 {
-    /* iint r0, r1, r2, r3 */
-    /* hint h0, h1, h2, h3 */
-    /* hint l0, l1, l2, l3 */
+    /* ir_word r0, r1, r2, r3 */
+    /* ir_half h0, h1, h2, h3 */
+    /* ir_half l0, l1, l2, l3 */
     _irid_join_register(0);
     _irid_join_register(1);
     _irid_join_register(2);
     _irid_join_register(3);
 
-    iint r4, r5, r6, r7;
-    iint ip, sp, bp;
+    ir_word r4, r5, r6, r7;
+    ir_word ip, sp, bp;
 
     struct
     {
-        hint    cf : 1;
-        hint    zf : 1;
-        hint    of : 1;
+        ir_word    cf : 1;
+        ir_word    zf : 1;
+        ir_word    of : 1;
+        ir_word    sf : 1;
     };
 };
 

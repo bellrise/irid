@@ -20,6 +20,9 @@ int argparse(struct runtime *rt, int argc, char **argv)
             rt->binfile = argv[i];
     }
 
+    if (!rt->binfile)
+        die("no binary file");
+
     return 0;
 }
 

@@ -11,7 +11,7 @@ CFLAGS := -Wall -Wextra -Iinc -fsanitize=address -DDEBUG
 all: _setup emul ld asm
 
 emul: _setup
-	$(CC) $(CFLAGS) -o build/irid-emul $(shell find emul -name '*.c')
+	$(CC) -o build/irid-emul $(CFLAGS) $(shell find emul -name '*.c')
 
 ld: _setup
 
@@ -27,4 +27,5 @@ _setup:
 	mkdir -p build
 
 
-.PHONY : all emul ld asm
+.PHONY  : all emul ld asm
+.SILENT : emul ld asm _setup
