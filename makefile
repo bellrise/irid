@@ -5,7 +5,7 @@
 # project, generating binaries in the `build` directory.
 
 CC 	   := clang
-CFLAGS := -Wall -Wextra -Iinc -fsanitize=address -DDEBUG
+CFLAGS := -Wall -Wextra -Iinc -O3 -DDEBUG
 
 
 all: _setup emul ld asm

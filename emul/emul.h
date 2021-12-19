@@ -38,10 +38,10 @@ struct runtime
 /* Each mapped 1024B page has a page_info struct assigned to it. */
 struct page_info
 {
-    int     flags;
-    ir_word vaddr;
-    char   *addr;
-    int   (*write_handler) (struct page_info *self, ir_word vaddr);
+    int      flags;
+    ir_word  vaddr;
+    char    *addr;
+    int    (*write_handler) (struct page_info *self, ir_word vaddr);
 };
 
 /* A memory bank contains n 1024B pages, each contaning a seperate page_info

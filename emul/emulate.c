@@ -55,7 +55,7 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
     /* Start executing from address 0x0000. We don't have to worry about ending
        this loop, because if the instruction pointer goes above IRID_MAX_ADDR,
        it will just roll over. */
-    ir_half instruction;
+    ir_half instruction, half_temp;
     ir_half *here;
     ir_word temp;
 
@@ -71,6 +71,32 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
                     PUSH16(temp);
                 else
                     PUSH8(*get_raddr(&regs, here[1]));
+                regs.ip += 2;
+                break;
+
+            /* Push an immediate value onto the stack. */
+            case I_PUSH8:
+                PUSH8(here[1]);
+                regs.ip += 2;
+                break;
+
+            /* Push an immediate value onto the stack. */
+            case I_PUSH16:
+                PUSH16(* (ir_word *) (here + 1));
+                regs.ip += 3;
+                break;
+
+            /* Pop a value off the stack into a register. */
+            case I_POP:
+                if (here[1] <= R_R7 || here[1] >= R_IP) {
+                    temp = POP16();
+                    info("pop16=%x", temp);
+                    * (ir_word *) get_raddr(&regs, here[1]) = temp;
+                } else {
+                    half_temp = POP8();
+                    info("pop8=%x", half_temp);
+                    *get_raddr(&regs, here[1]) = half_temp;
+                }
                 regs.ip += 2;
                 break;
 
@@ -185,7 +211,7 @@ static inline void stack_push16(struct memory_bank *mem, struct irid_reg *regs,
 static inline ir_half stack_pop8(struct memory_bank *mem,
         struct irid_reg *regs)
 {
-    if (regs->sp < regs->bp)
+    if (regs->sp >= regs->bp)
         fail(regs, "stack corruption, read above bp");
     regs->sp += 1;
     return mem->base_ptr[regs->sp - 1];
@@ -194,7 +220,7 @@ static inline ir_half stack_pop8(struct memory_bank *mem,
 static inline ir_word stack_pop16(struct memory_bank *mem,
         struct irid_reg *regs)
 {
-    if (regs->sp < regs->bp)
+    if (regs->sp + 1 >= regs->bp)
         fail(regs, "stack corruption, read above bp");
     regs->sp += 2;
     return * (ir_word *) (mem->base_ptr + regs->sp - 2);
@@ -227,12 +253,6 @@ static int text_page_handler(struct page_info *_Unused self, ir_word _Unused
 static void fail(struct irid_reg *regs, const char *msg)
 {
     printf("\n\033[1;31mCPU fault:\033[1;39m %s\033[0m\n\n", msg);
-
-    printf("Unfortunately, the CPU entered a state which it cannot recover "
-           "from.\nThis may be caused by a illegal offset, invalid instruction"
-           ", or an access\nviolation. For 16-bit registers, the values shown "
-           "here are flipped, because\nthe Irid architecture is little-endian."
-           "\n\n");
 
     printf(
         "Registers:\n"
