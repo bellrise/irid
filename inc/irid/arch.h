@@ -9,6 +9,7 @@
 #define IRID_PAGE_SIZE          0x0400
 #define IRID_MAX_ADDR           0xffff
 #define IRID_MAX_PAGES          (IRID_MAX_ADDR + 1) / IRID_PAGE_SIZE
+#define IRID_PAGE_SIZE_BITS     10
 
 /* Register IDs. In the instruction format, registers are represented using
    a single byte. */

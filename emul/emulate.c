@@ -12,6 +12,10 @@ static void handle_cpucall(struct memory_bank *mem, struct irid_reg *regs);
 static ir_half *get_raddr(struct irid_reg *regs, ir_half id);
 static void set_register8(struct irid_reg *regs, ir_half id, ir_half val);
 static void set_register16(struct irid_reg *regs, ir_half id, ir_word val);
+static ir_half read8(struct memory_bank *mem, ir_word vaddr);
+static ir_word read16(struct memory_bank *mem, ir_word vaddr);
+static void write8(struct memory_bank *mem, ir_word vaddr, ir_half val);
+static void write16(struct memory_bank *mem, ir_word vaddr, ir_word val);
 static inline void stack_push8(struct memory_bank *mem, struct irid_reg *regs,
         ir_half val);
 static inline void stack_push16(struct memory_bank *mem, struct irid_reg *regs,
@@ -20,6 +24,8 @@ static inline ir_half stack_pop8(struct memory_bank *mem,
         struct irid_reg *regs);
 static inline ir_word stack_pop16(struct memory_bank *mem,
         struct irid_reg *regs);
+static struct page_info *get_page_from_vaddr(struct memory_bank *mem,
+        ir_word vaddr);
 
 
 #define PUSH8(VAL)      stack_push8(&memory, &regs, VAL)
@@ -50,14 +56,12 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
     text_pages[0]->write_handler = text_page_handler;
     text_pages[1]->write_handler = text_page_handler;
 
-    dbytes(memory.base_ptr, 64);
-
     /* Start executing from address 0x0000. We don't have to worry about ending
        this loop, because if the instruction pointer goes above IRID_MAX_ADDR,
        it will just roll over. */
     ir_half instruction, half_temp;
+    ir_word temp, temp2;
     ir_half *here;
-    ir_word temp;
 
     while (1) {
         instruction = memory.base_ptr[regs.ip];
@@ -121,6 +125,37 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
                 set_register16(&regs, here[1], * ((ir_word *)(here + 2)));
                 regs.ip += 4;
                 break;
+
+            /* Load a value from memory pointed by [addr] to a register. */
+            case I_LOAD:
+                temp = * (ir_word *) (here + 2);
+                if (here[1] <= R_R7 || here[1] >= R_IP)
+                    set_register16(&regs, here[1], read16(&memory, temp));
+                else
+                    set_register8(&regs, here[1], read8(&memory, temp));
+                regs.ip += 4;
+                break;
+
+            /* Store a value from a register into memory pointed by [addr]. */
+            case I_STORE:
+                temp  = * (ir_word *) (here + 2);
+                temp2 = * (ir_word *) get_raddr(&regs, here[1]);
+                if (here[1] <= R_R7 || here[1] >= R_IP)
+                    write16(&memory, temp, temp2);
+                else
+                    write8(&memory, temp, *get_raddr(&regs, here[1]));
+                regs.ip += 4;
+                break;
+
+            /* Reset a register. */
+            case I_NULL:
+                if (here[1] <= R_R7 || here[1] >= R_IP)
+                    * (ir_word *) get_raddr(&regs, here[1]) = 0;
+                else
+                    *get_raddr(&regs, here[1]) = 0;
+                regs.ip += 2;
+                break;
+
 
             /* Execute a CPU function. */
             case I_CPUCALL:
@@ -190,6 +225,69 @@ static void set_register16(struct irid_reg *regs, ir_half id, ir_word val)
     *addr = val;
 }
 
+static ir_half read8(struct memory_bank *mem, ir_word vaddr)
+{
+    struct page_info *page;
+    ir_half res;
+
+    page = get_page_from_vaddr(mem, vaddr);
+    vaddr -= page->vaddr;
+    res = page->addr[vaddr];
+
+    info("0x%02hx 0x%04hx", res, vaddr);
+
+    return res;
+}
+
+static ir_word read16(struct memory_bank *mem, ir_word vaddr)
+{
+    struct page_info *page;
+    ir_word res;
+
+    page = get_page_from_vaddr(mem, vaddr);
+    vaddr -= page->vaddr;
+    res = * (ir_word *) ((size_t) page->addr + vaddr);
+
+    info("0x%04hx @ 0x%04hx", res, vaddr);
+
+    return res;
+}
+
+static void write8(struct memory_bank *mem, ir_word vaddr, ir_half val)
+{
+    struct page_info *page;
+    ir_half *addr;
+
+    page = get_page_from_vaddr(mem, vaddr);
+
+    if (!(page->flags & PAGE_WRITE))
+        die("forbidden write 8 to 0x%04x", vaddr);
+
+    /* If any write handler is defined, be sure to call it. */
+    if (page->write_handler)
+        page->write_handler(page, vaddr);
+
+    addr = (ir_half *) ((size_t) page->addr + (vaddr - page->vaddr));
+    *addr = val;
+}
+
+static void write16(struct memory_bank *mem, ir_word vaddr, ir_word val)
+{
+    struct page_info *page;
+    ir_word *addr;
+
+    page = get_page_from_vaddr(mem, vaddr);
+    if (!(page->flags & PAGE_WRITE))
+        die("forbidden write 8 to 0x%04x", vaddr);
+
+    /* If any write handler is defined, be sure to call it. */
+    if (page->write_handler)
+        page->write_handler(page, vaddr);
+
+    addr = (ir_word *) ((size_t) page->addr + (vaddr - page->vaddr));
+    *addr = val;
+}
+
 static inline void stack_push8(struct memory_bank *mem, struct irid_reg *regs,
         ir_half val)
 {
@@ -224,6 +322,19 @@ static inline ir_word stack_pop16(struct memory_bank *mem,
         fail(regs, "stack corruption, read above bp");
     regs->sp += 2;
     return * (ir_word *) (mem->base_ptr + regs->sp - 2);
+}
+
+static struct page_info *get_page_from_vaddr(struct memory_bank *mem,
+        ir_word vaddr)
+{
+    ir_word paddr;
+
+    paddr = vaddr >> IRID_PAGE_SIZE_BITS;
+
+    if (paddr >= mem->pages)
+        die("virtual address 0x%x out of range", vaddr);
+
+    return &mem->page_info[paddr];
 }
 
 static void load_file(void *addr, size_t max, size_t off, const char *path)

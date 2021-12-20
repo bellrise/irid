@@ -8,12 +8,16 @@
 # mov bp, sp
 # push16 0x1155
 # pop r7
+# load r3, 0x003e
+# store h0, 0x003e
 # cpucall fault
 sprog = b'\x16\x00\x11\x22'         \
         b'\x16\x71\x40\x00'         \
         b'\x14\x72\x71'             \
         b'\x12\x55\x11'             \
         b'\x13\x07'                 \
+        b'\x17\x03\x3e\x00'         \
+        b'\x18\x12\x3e\x00'         \
         b'\x01\x14'
 
 with open('test.bin', 'wb') as f:

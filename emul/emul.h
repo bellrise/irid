@@ -45,7 +45,8 @@ struct page_info
 };
 
 /* A memory bank contains n 1024B pages, each contaning a seperate page_info
-   struct with some flags and callbacks assigned. */
+   struct with some flags and callbacks assigned. The base_ptr is the real
+   pointer into memory the emulator works in. */
 struct memory_bank
 {
     char             *base_ptr;
