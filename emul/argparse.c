@@ -45,6 +45,7 @@ static void parse_opt(struct runtime *_Unused rt, int *i, int _Unused argc,
     for (size_t j = 1; j < arglen; j++) {
         arg = argv[*i][j];
         switch (arg) {
+            case '?':
             case 'h':
                 usage();
                 break;
@@ -70,7 +71,7 @@ long_opt:
 static void usage()
 {
     printf(
-        "usage: irid-emul [-hvV] [opt]... file\n\n"
+        "usage: irid-emul [-hv] [opt]... <file>\n\n"
         "Emulate the Irid architecture.\n\n"
         "  file         the binary file to load at address 0x0000\n"
         "  -h, --help   show this and exit\n"

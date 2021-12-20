@@ -1,8 +1,5 @@
 /* Irid emulator.
-   Copyright (C) 2021 bellrise
-
-   This is the emulator for the Irid architecture, supporting all features
-   specified in the documentation for it. */
+   Copyright (C) 2021 bellrise */
 
 #include <irid/arch.h>
 #include <stdio.h>

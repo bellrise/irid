@@ -12,10 +12,6 @@ static void handle_cpucall(struct memory_bank *mem, struct irid_reg *regs);
 static ir_half *get_raddr(struct irid_reg *regs, ir_half id);
 static void set_register8(struct irid_reg *regs, ir_half id, ir_half val);
 static void set_register16(struct irid_reg *regs, ir_half id, ir_word val);
-static ir_half read8(struct memory_bank *mem, ir_word vaddr);
-static ir_word read16(struct memory_bank *mem, ir_word vaddr);
-static void write8(struct memory_bank *mem, ir_word vaddr, ir_half val);
-static void write16(struct memory_bank *mem, ir_word vaddr, ir_word val);
 static inline void stack_push8(struct memory_bank *mem, struct irid_reg *regs,
         ir_half val);
 static inline void stack_push16(struct memory_bank *mem, struct irid_reg *regs,
@@ -24,8 +20,6 @@ static inline ir_half stack_pop8(struct memory_bank *mem,
         struct irid_reg *regs);
 static inline ir_word stack_pop16(struct memory_bank *mem,
         struct irid_reg *regs);
-static struct page_info *get_page_from_vaddr(struct memory_bank *mem,
-        ir_word vaddr);
 
 
 #define PUSH8(VAL)      stack_push8(&memory, &regs, VAL)
@@ -44,11 +38,16 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
     bank_alloc(&memory, IRID_MAX_PAGES, 0);
     load_file(memory.base_ptr, IRID_MAX_ADDR, load_offt, binfile);
 
-    /* Mark the last page as read-only, for cpucalls. The third and second last
-       pages are initiallly mapped to 80*25 screen I/O. */
+    /*
+     * Mark the last page as read-only, for cpucalls. The third and second last
+     * pages are initiallly mapped to 80*25 screen I/O.
+     */
+
     cpu_page = &memory.page_info[memory.pages - 1];
     text_pages[0] = &memory.page_info[memory.pages - 3];
     text_pages[1] = &memory.page_info[memory.pages - 2];
+
+    system("sleep");
 
     cpu_page->flags = PAGE_READ | PAGE_CPU;
     text_pages[0]->flags |= PAGE_TEXT;
@@ -56,9 +55,12 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
     text_pages[0]->write_handler = text_page_handler;
     text_pages[1]->write_handler = text_page_handler;
 
-    /* Start executing from address 0x0000. We don't have to worry about ending
-       this loop, because if the instruction pointer goes above IRID_MAX_ADDR,
-       it will just roll over. */
+    /*
+     * Start executing from address 0x0000. We don't have to worry about ending
+     * this loop, because if the instruction pointer goes above IRID_MAX_ADDR,
+     * it will just roll over.
+     */
+
     ir_half instruction, half_temp;
     ir_word temp, temp2;
     ir_half *here;
@@ -95,11 +97,11 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
                 if (here[1] <= R_R7 || here[1] >= R_IP) {
                     temp = POP16();
                     info("pop16=%x", temp);
-                    * (ir_word *) get_raddr(&regs, here[1]) = temp;
+                    set_register16(&regs, here[1], temp);
                 } else {
                     half_temp = POP8();
                     info("pop8=%x", half_temp);
-                    *get_raddr(&regs, here[1]) = half_temp;
+                    set_register8(&regs, here[1], half_temp);
                 }
                 regs.ip += 2;
                 break;
@@ -150,23 +152,22 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
             /* Reset a register. */
             case I_NULL:
                 if (here[1] <= R_R7 || here[1] >= R_IP)
-                    * (ir_word *) get_raddr(&regs, here[1]) = 0;
+                    set_register16(&regs, here[1], 0);
                 else
-                    *get_raddr(&regs, here[1]) = 0;
+                    set_register8(&regs, here[1], 0);
                 regs.ip += 2;
                 break;
-
 
             /* Execute a CPU function. */
             case I_CPUCALL:
                 handle_cpucall(&memory, &regs);
+                regs.ip += 2;
                 break;
 
             default:
                 fail(&regs, "invalid instruction");
         }
 
-        dbytes(memory.base_ptr, 64);
         if (regs.sf)
             break;
     }
@@ -181,11 +182,21 @@ static void handle_cpucall(struct memory_bank *mem, struct irid_reg *regs)
         case CPUCALL_SHUTDOWN:
             regs->sf = 1;
             break;
+
         case CPUCALL_RESTART:
+            /*
+             * In order to restart the whole emulator, we only need to set
+             * all registers to 0. Because the instruction pointer is also
+             * set to 0, the next iteration of the emulator loop will
+             * automatically move to the start of memory.
+             */
             memset(regs, 0, sizeof(struct irid_reg));
             break;
+
         case CPUCALL_FAULT:
             fail(regs, "intentional cpufault");
+            break;
+
         default:
             fail(regs, "unknown cpucall");
     }
@@ -193,9 +204,12 @@ static void handle_cpucall(struct memory_bank *mem, struct irid_reg *regs)
 
 static ir_half *get_raddr(struct irid_reg *regs, ir_half id)
 {
-    /* Register IDs 0x00-0x07 are generic 16 bit registers. For a quick trick,
-       we can use the fact that these register IDs are also the offset into
-       the irid_reg struct. */
+    /*
+     * Register IDs 0x00-0x07 are generic 16 bit registers. For a quick trick,
+     * we can use the fact that these register IDs are also the offset into
+     * the irid_reg struct.
+     */
+
     if (id <= R_R7) {
         return ((ir_half *) regs) + (id << 1);
     }
@@ -222,69 +236,6 @@ static void set_register8(struct irid_reg *regs, ir_half id, ir_half val)
 static void set_register16(struct irid_reg *regs, ir_half id, ir_word val)
 {
     ir_word *addr = (ir_word *) get_raddr(regs, id);
-    *addr = val;
-}
-
-static ir_half read8(struct memory_bank *mem, ir_word vaddr)
-{
-    struct page_info *page;
-    ir_half res;
-
-    page = get_page_from_vaddr(mem, vaddr);
-    vaddr -= page->vaddr;
-    res = page->addr[vaddr];
-
-    info("0x%02hx 0x%04hx", res, vaddr);
-
-    return res;
-}
-
-static ir_word read16(struct memory_bank *mem, ir_word vaddr)
-{
-    struct page_info *page;
-    ir_word res;
-
-    page = get_page_from_vaddr(mem, vaddr);
-    vaddr -= page->vaddr;
-    res = * (ir_word *) ((size_t) page->addr + vaddr);
-
-    info("0x%04hx @ 0x%04hx", res, vaddr);
-
-    return res;
-}
-
-static void write8(struct memory_bank *mem, ir_word vaddr, ir_half val)
-{
-    struct page_info *page;
-    ir_half *addr;
-
-    page = get_page_from_vaddr(mem, vaddr);
-
-    if (!(page->flags & PAGE_WRITE))
-        die("forbidden write 8 to 0x%04x", vaddr);
-
-    /* If any write handler is defined, be sure to call it. */
-    if (page->write_handler)
-        page->write_handler(page, vaddr);
-
-    addr = (ir_half *) ((size_t) page->addr + (vaddr - page->vaddr));
-    *addr = val;
-}
-
-static void write16(struct memory_bank *mem, ir_word vaddr, ir_word val)
-{
-    struct page_info *page;
-    ir_word *addr;
-
-    page = get_page_from_vaddr(mem, vaddr);
-    if (!(page->flags & PAGE_WRITE))
-        die("forbidden write 8 to 0x%04x", vaddr);
-
-    /* If any write handler is defined, be sure to call it. */
-    if (page->write_handler)
-        page->write_handler(page, vaddr);
-
-    addr = (ir_word *) ((size_t) page->addr + (vaddr - page->vaddr));
     *addr = val;
 }
 
@@ -322,19 +273,6 @@ static inline ir_word stack_pop16(struct memory_bank *mem,
         fail(regs, "stack corruption, read above bp");
     regs->sp += 2;
     return * (ir_word *) (mem->base_ptr + regs->sp - 2);
-}
-
-static struct page_info *get_page_from_vaddr(struct memory_bank *mem,
-        ir_word vaddr)
-{
-    ir_word paddr;
-
-    paddr = vaddr >> IRID_PAGE_SIZE_BITS;
-
-    if (paddr >= mem->pages)
-        die("virtual address 0x%x out of range", vaddr);
-
-    return &mem->page_info[paddr];
 }
 
 static void load_file(void *addr, size_t max, size_t off, const char *path)

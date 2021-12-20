@@ -1,8 +1,5 @@
 /* Output routines.
-   Copyright (C) 2021 bellrise
-
-   The die function will exit the program immediately, warn() will just print
-   a warning with a purple colour. */
+   Copyright (C) 2021 bellrise */
 
 #include <stdarg.h>
 #include <stdlib.h>
@@ -75,6 +72,12 @@ void page_info_d(const struct page_info *const page)
 
 void dbytes(void *addr, size_t amount)
 {
+    /*
+     * To make this look nice, bytes are grouped to 16 per line, simmilar to
+     * what xxd or hexdump does. To get the amount of 16 byte groups, we only
+     * have to move the amount by 4 bits right. Any bytes left are printed on
+     * the last line.
+     */
     size_t lines, rest;
 
     lines = amount >> 4;

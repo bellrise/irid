@@ -15,7 +15,7 @@ Registers
 r0, r1, r2, r3, r4, r5, r6, r7  General purpose registers (16 bit)
 h0, h1, h2, h3, l0, l1, l2, l3  Half registers (8 bit)
 ip, sp, bp                      Instruction pointer, stack pointer, base pointer
-cf, zf, of                      Compare flag, zero flag, overflow flag
+cf, zf, of, sf                  Compare, zero, overflow, shutdown flag
 
 
 The 8 general purpose registers may be used freely to store data, and in

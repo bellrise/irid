@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# Installer script. Must be ran from the root directory. This is connected
+# to the core makefile, which can be ran using `make install`. The destination
+# directory is selected successively ~/.local/bin, ~/bin, /usr/local/bin and
+# finally /usr/bin. You can specify the path using the first argument.
+
+# Configure the installation and root path.
+
+[ "$(basename $PWD)" = "scripts" ] && echo "Must be ran from the" \
+    "project root" && exit 1
+
+if [ ! -z "$1" ]; then
+    BIN="$1"
+else
+    BIN="$HOME/.local/bin"
+    SUDO=""
+    [ ! -d "$BIN" ] && BIN="$HOME/bin"
+    [ ! -d "$BIN" ] && BIN="/usr/local/bin" && SUDO="sudo"
+    [ ! -d "$BIN" ] && BIN="/usr/bin" && SUDO="sudo"
+    [ ! -d "$BIN" ] && echo "Could not find any destination" && exit 1
+fi
+
+# Find all generated binaries and move them.
+
+[ ! -d "./build" ] && echo "Build the project first" && exit 1
+BINARIES=$(find ./build -name 'irid-*')
+
+echo "Installing to $BIN"
+$SUDO cp -f $BINARIES $BIN
+
+exit 0

@@ -11,8 +11,11 @@
 #define IRID_MAX_PAGES          (IRID_MAX_ADDR + 1) / IRID_PAGE_SIZE
 #define IRID_PAGE_SIZE_BITS     10
 
-/* Register IDs. In the instruction format, registers are represented using
-   a single byte. */
+/*
+ * Register IDs. In the instruction format, registers are represented using
+ * a single byte.
+ */
+
 #define R_R0                    0x00
 #define R_R1                    0x01
 #define R_R2                    0x02
@@ -33,8 +36,11 @@
 #define R_SP                    0x71
 #define R_BP                    0x72
 
-/* Instruction set. All instructions fit in the 0-255 range, all fitting in
-   a single byte. For more information on each instruction, see doc/arch. */
+/*
+ * Instruction set. All instructions fit in the 0-255 range, all fitting in
+ * a single byte. For more information on each instruction, see doc/arch.
+ */
+
 #define I_NOP                   0x00
 #define I_CPUCALL               0x01
 /* reserved */
@@ -78,39 +84,53 @@
 #define I_SHL                   0x44
 #define I_SHL8                  0x45
 
-/* CPU call functions. In order to execute a function built into the CPU itself,
-   call the I_CPUCALL instruction with the correct function in r0. */
+/*
+ * CPU call functions. In order to execute a function built into the CPU itself,
+ * call the I_CPUCALL instruction with the correct function in r0.
+ */
+
 #define CPUCALL_SHUTDOWN        0x10
 #define CPUCALL_RESTART         0x11
 #define CPUCALL_LISTDEVS        0x12
 #define CPUCALL_VMOD            0x13
 #define CPUCALL_FAULT           0x14
 
-/* Visual mode of the CPU. You can set this using the CPUCALL_VMOD function.
-   If the text mode is enabled, the screen is rendered as a 80*25 character map,
-   which you can modify writing to video memory. This is on by default. The
-   pixel mode changes the screen resolution to the values given in r2 & r3.
-   You can learn more in doc/arch. */
+/*
+ * Visual mode of the CPU. You can set this using the CPUCALL_VMOD function.
+ * If the text mode is enabled, the screen is rendered as a 80*25 character map,
+ * which you can modify writing to video memory. This is on by default. The
+ * pixel mode changes the screen resolution to the values given in r2 & r3.
+ * You can learn more in doc/arch.
+ */
+
 #define CPUCALL_VMOD_TXT        0x01
 #define CPUCALL_VMOD_PIX        0x02
 
-/* CPU fault IDs. Each possible CPU fault has a corresponding 8-bit number,
-   which can be used to identify the problem. */
+/*
+ * CPU fault IDs. Each possible CPU fault has a corresponding 8-bit number,
+ * which can be used to identify the problem.
+ */
+
 #define CPUFAULT_SEG            0x01
 #define CPUFAULT_IO             0x02
 
-/* Irid regular int & half int. All full 16-bit registers use the rint type
-   instead of the iint type, because the signed bit needs to be ignored. */
+/*
+ * Irid regular int & half int. All full 16-bit registers use the rint type
+ * instead of the iint type, because the signed bit needs to be ignored.
+ */
+
 typedef short           ir_sword;
 typedef unsigned short  ir_word;
 typedef unsigned char   ir_half;
 
+
 #define _irid_join_register(ID) union { ir_word r##ID; struct {             \
-    ir_half    h##ID;                                                       \
-    ir_half    l##ID;                                                       \
+    ir_half    h ## ID;                                                     \
+    ir_half    l ## ID;                                                     \
 }; }
 
 /* Irid register set. Note that the placement is intentional. */
+
 struct irid_reg
 {
     /* ir_word r0, r1, r2, r3 */
@@ -122,14 +142,14 @@ struct irid_reg
     _irid_join_register(3);
 
     ir_word r4, r5, r6, r7;
-    ir_word ip, sp, bp;
+    ir_word ip, sp, bp;         /* Instruction, stack & base ptr */
 
     struct
     {
-        ir_word    cf : 1;
-        ir_word    zf : 1;
-        ir_word    of : 1;
-        ir_word    sf : 1;
+        ir_word    cf : 1;      /* Compare flag */
+        ir_word    zf : 1;      /* Zero flag */
+        ir_word    of : 1;      /* Overflow flag */
+        ir_word    sf : 1;      /* Shutdown flag */
     };
 };
 

@@ -5,3 +5,13 @@ Irid is a custom, 16-bit architecture built for fun and learning purposes. This
 project has a special emulator built-in, which will create a X11 window to draw
 the pixels set by any software that's running on the emulator, written using the
 Irid instruction set.
+
+
+Build
+-----
+
+To compile this whole project, the only requirements are a sane C compiler,
+and GNU Make. Optionally, you may use Python 3 for scripts (not required to
+build). All you have to run is:
+
+$ make

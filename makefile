@@ -20,6 +20,8 @@ asm: _setup
 clean:
 	rm -rf build
 
+install:
+	sh ./scripts/install
 
 # Private targets
 
@@ -28,4 +30,4 @@ _setup:
 
 
 .PHONY  : all emul ld asm
-.SILENT : emul ld asm _setup
+.SILENT : emul ld asm clean install install-global _setup

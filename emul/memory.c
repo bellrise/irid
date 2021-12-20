@@ -23,6 +23,11 @@ void bank_alloc(struct memory_bank *bank, size_t amount, ir_word vaddr_offt)
     if (!bank->page_info)
         die("failed to alloc page_info array");
 
+    /*
+     * Set some default flags for each page. This is nice to not have
+     * to mark each page as readable/writable.
+     */
+
     for (size_t i = 0; i < amount; i++) {
         bank->page_info[i].flags = PAGE_READ | PAGE_WRITE;
         bank->page_info[i].vaddr = i * IRID_PAGE_SIZE + vaddr_offt;
