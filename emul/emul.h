@@ -4,6 +4,7 @@
 #ifndef EMUL_H
 #define EMUL_H
 
+#include "emul_graphics.h"
 #include <irid/emul.h>
 #include <irid/arch.h>
 #include <stdlib.h>
@@ -26,6 +27,7 @@ struct runtime
     char  **argv;
     char   *binfile;
     int     is_verbose;
+    struct eg_window *win;
 };
 
 /* Page flags. */

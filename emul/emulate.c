@@ -47,8 +47,6 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
     text_pages[0] = &memory.page_info[memory.pages - 3];
     text_pages[1] = &memory.page_info[memory.pages - 2];
 
-    system("sleep");
-
     cpu_page->flags = PAGE_READ | PAGE_CPU;
     text_pages[0]->flags |= PAGE_TEXT;
     text_pages[1]->flags |= PAGE_TEXT;

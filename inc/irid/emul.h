@@ -1,5 +1,6 @@
 /* Emulator API declarations.
    Copyright (C) 2021 bellrise */
+
 #ifndef IRID_EMUL_H
 #define IRID_EMUL_H
 

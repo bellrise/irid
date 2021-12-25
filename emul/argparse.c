@@ -1,7 +1,8 @@
 /* Argument parser.
    Copyright (C) 2021 bellrise */
-#include "emul.h"
+
 #include <string.h>
+#include "emul.h"
 
 static void parse_opt(struct runtime *rt, int *i, int argc, char **argv);
 static void usage();
