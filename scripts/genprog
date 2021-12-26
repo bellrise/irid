@@ -3,21 +3,15 @@
 # Generate a program that can be loaded into the emulator. The program ends
 # with a forced CPU fault, so we can see values stored in the registers.
 
-# mov16 r0, 0x2211
-# mov16 sp, 0x4000
-# mov bp, sp
-# push16 0x1155
-# pop r7
-# load r3, 0x003e
-# store h0, 0x003e
+# mov16 r3, 0x1122
+# mov16 r0, 0x003e
+# store r3, r0
+# load h1, r0
 # cpucall fault
-sprog = b'\x16\x00\x11\x22'         \
-        b'\x16\x71\x40\x00'         \
-        b'\x14\x72\x71'             \
-        b'\x12\x55\x11'             \
-        b'\x13\x07'                 \
-        b'\x17\x03\x3e\x00'         \
-        b'\x18\x12\x3e\x00'         \
+sprog = b'\x16\x03\x22\x11'         \
+        b'\x16\x00\x3e\x00'         \
+        b'\x18\x03\x00'             \
+        b'\x17\x12\x00'             \
         b'\x01\x14'
 
 with open('test.bin', 'wb') as f:

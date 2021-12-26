@@ -79,8 +79,6 @@ int irid_emulate(const char *binfile, size_t load_offt, int opts, void *_win)
         instruction = context.mem->base_ptr[context.regs->ip];
         here        = &((ir_half *) context.mem->base_ptr)[context.regs->ip];
 
-        info("0x%02hhx", instruction);
-
         switch (instruction) {
             /* Push a value from a register onto the stack. */
             case I_PUSH:
@@ -150,12 +148,18 @@ int irid_emulate(const char *binfile, size_t load_offt, int opts, void *_win)
                     half_temp = read8(context.mem, temp);
                     set_register8(&context, here[1], half_temp);
                 }
-
                 context.regs->ip += 3;
                 break;
 
             /* Store contents of [rx/hx] to the address pointed by [rx]. */
             case I_STORE:
+                temp = *get_raddr(&context, here[2]);
+                if (here[1] <= R_R7 || here[1] >= R_IP) {
+                    write16(context.mem, temp, * (ir_word *) get_raddr(
+                                &context, here[1]));
+                } else {
+                    write8(context.mem, temp, *get_raddr(&context, here[1]));
+                }
                 context.regs->ip += 3;
                 break;
 
@@ -227,8 +231,6 @@ static ir_half *get_raddr(struct emulator_ctx *ctx, ir_half id)
      * we can use the fact that these register IDs are also the offset into
      * the irid_reg struct.
      */
-
-    info("%x", id);
 
     if (id <= R_R7) {
         return ((ir_half *) ctx->regs) + (id << 1);
@@ -325,7 +327,7 @@ static void fail(struct emulator_ctx *ctx, int err, const char *msg)
         "  r0=0x%04x r1=0x%04x r2=0x%04x r3=0x%04x\n"
         "  r4=0x%04x r5=0x%04x r6=0x%04x r7=0x%04x\n"
         "  ip=0x%04x sp=0x%04x bp=0x%04x\n"
-        "  cf=%d      zf=%d      of=%d     sf=%d\n\n",
+        "  cf=%d      zf=%d      of=%d      sf=%d\n\n",
         regs->r0, regs->r1, regs->r2, regs->r3,
         regs->r4, regs->r5, regs->r6, regs->r7,
         regs->ip, regs->sp, regs->bp,
