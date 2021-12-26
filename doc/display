@@ -1,0 +1,54 @@
+Displaying
+==========
+
+Any memory written to video memory will show up on a operating system window
+created by the emulator. When using the default irid-emul, passing the -w flag
+will disable the window. If you're just using the emulator API, see the comment
+above the irid_emulate function in <irid/emul.h>.
+
+By default, the last 3 pages are special pages for interacting with the display
+and emulated CPU. For example, the 80x25 text display occupies 2 pages, located
+at 0xf400. Both these pages have a write_handler connected, which listens for
+any changes, which will get automatically written to the display.
+
+For example, to draw an 'X' in the upper left corner of the screen, you might:
+
+    mov h0, 0x58
+    store h0, 0xf400
+
+
+For a very simple 'print' subroutine, you may store the last position in memory
+externally, and print n chars incrementing the pointer until it reaches a null
+byte in the string.
+
+    ; r4 - pointer to string
+    ; r5 - pointer to video memory
+    print:
+    push r0                         ; keep r0 per calling convention
+
+    .loop:
+    load h0, r4                     ; load the first char of the string
+    cmp h0, 0                       ; check for null byte
+    jcs .end                        ; end loop if the char is a null byte
+
+    store h0, r5                    ; store the char into video memory
+    add r4, 1                       ; increment the string index
+    add r5, 1                       ; increment the video memory index
+
+    jmp .loop                       ; return to the loop
+
+    .end:
+    pop r0                          ; restore r0 for the caller
+    ret
+
+
+Calling this function is also very simple, you just need to pass the pointer to
+the string and the location of video memory. A hello world program is as simple
+as:
+
+    text:                           ; allocate some bytes for the string
+    .alloc "Hello world\0"
+
+    mov r4, text                    ; pointer to the string
+    mov r5, 0xf400                  ; pointer to the video memory
+    call print                      ; call the print subroutine

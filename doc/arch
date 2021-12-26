@@ -54,20 +54,20 @@ Instruction set
 * Memory/register operations
     - mov [rx/hx] [rz/hz/imm8/imm16]
         Move a register/immediate into the register.
-    - load [rx/hx] [addr]
-        Load a value from memory pointed by [addr] to a register.
-    - store [rx/hx] [addr]
-        Store a value from a register into memory pointed by [addr].
+    - load [rx/hx] [rx]
+        Load contents of memory pointed by [rx] to [rx/hx].
+    - store [rx/hx] [rx]
+        Store contents of [rx/hx] to the address pointed by [rx].
     - null [rx/hx]
         Set a register to 0.
 
 * Comparison operations
     - cmp [rx] [rz/imm8/imm16]
         Compare the value stored in a register to another register or
-        an immediate. If the comparison succeeds, the carry flag is set.
+        an immediate. If the comparison succeeds, the compare flag is set.
     - cmg [rx] [rz/imm8/imm16]
         See if the value in the register is greater than the register or
-        immediate. If the comparison succeeds, the carry flag is set.
+        immediate. If the comparison succeeds, the compare flag is set.
 
 * Program control
     - jmp [addr]
@@ -116,6 +116,56 @@ All memory is split into 64 pages, each being 1kB (1024 or 2^10 bytes) in size.
 
 Any attempt to write to the CPU page will result in a segmentation fault,
 crashing the CPU.
+
+
+Calling convention
+------------------
+
+The Irid calling convention defines caller registers & callee registers. This
+means that some registers have to be stored be the caller, because the called
+subroutine may trash them.
+
+Caller-saved    r4, r5, r6, r7, ip, flags
+Callee-saved    r0, r1, r2, r3, l0, l2, l3, h0, h1, h2, h3, sp, bp
+
+r3, which is a callee-saved instruction means that it has to preserved for the
+caller. In this example, r3 is ensured to be the same after and before the call.
+
+    mov r3, 10
+    call func_that_uses_r3
+    cmp r3, 10                  ; will set the compare flag
+
+
+Passing arguments can happen in either registers or the stack, depending on the
+size and amount of arguments. If an argument fits in a register, it is passed
+in one starting from r4, up to r7. If the argument is larger than 16 bits,
+a struct for example, it is passed on the stack.
+
+
+It is important to remember that Irid defines the stack pointers (sp & bp) to
+be callee-saved, meaning the stack cannot change after a call. When writing
+a public subroutine that may interact with other code you don't know about,
+it is good practice to place a preamble and an epilogue at each end.
+
+    ; Preamble
+    push sp
+    push r0
+    push r1
+    push r2
+    push r3
+
+    ; ... code ...
+
+    ; Epilogue
+    pop r3
+    pop r2
+    pop r1
+    pop r0
+    pop sp
+
+These operations can be made nicer with macros. Each of these registers is two
+bytes wide, so the total amount of "preamble" data is 10 bytes. When reading
+an argument off the stack, 10 bytes have to be added to reach it.
 
 
 CPU call
