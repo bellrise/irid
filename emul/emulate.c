@@ -1,51 +1,63 @@
 /* Main emulator function, accessable from the outside.
    Copyright (C) 2021 bellrise */
 
+#include "emul_graphics.h"
+#include <setjmp.h>
 #include <string.h>
 #include "emul.h"
 
 
 static void load_file(void *addr, size_t max, size_t off, const char *path);
 static int text_page_handler(struct page_info *self, ir_word vaddr);
-static void fail(struct irid_reg *regs, const char *msg);
-static void handle_cpucall(struct memory_bank *mem, struct irid_reg *regs);
-static ir_half *get_raddr(struct irid_reg *regs, ir_half id);
-static void set_register8(struct irid_reg *regs, ir_half id, ir_half val);
-static void set_register16(struct irid_reg *regs, ir_half id, ir_word val);
-static inline void stack_push8(struct memory_bank *mem, struct irid_reg *regs,
-        ir_half val);
-static inline void stack_push16(struct memory_bank *mem, struct irid_reg *regs,
-        ir_word val);
-static inline ir_half stack_pop8(struct memory_bank *mem,
-        struct irid_reg *regs);
-static inline ir_word stack_pop16(struct memory_bank *mem,
-        struct irid_reg *regs);
+static void fail(struct emulator_ctx *ctx, int err, const char *msg);
+static void handle_cpucall(struct emulator_ctx *ctx);
+static ir_half *get_raddr(struct emulator_ctx *ctx, ir_half id);
+static void set_register8(struct emulator_ctx *ctx, ir_half id, ir_half val);
+static void set_register16(struct emulator_ctx *ctx, ir_half id, ir_word val);
+static inline void stack_push8(struct emulator_ctx *ctx, ir_half val);
+static inline void stack_push16(struct emulator_ctx *ctx, ir_word val);
+static inline ir_half stack_pop8(struct emulator_ctx *ctx);
+static inline ir_word stack_pop16(struct emulator_ctx *ctx);
 
 
-#define PUSH8(VAL)      stack_push8(&memory, &regs, VAL)
-#define PUSH16(VAL)     stack_push16(&memory, &regs, VAL)
-#define POP8()          stack_pop8(&memory, &regs)
-#define POP16()         stack_pop16(&memory, &regs)
+#define PUSH8(VAL)      stack_push8(&context, VAL)
+#define PUSH16(VAL)     stack_push16(&context, VAL)
+#define POP8()          stack_pop8(&context)
+#define POP16()         stack_pop16(&context)
 
 
-int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
+int irid_emulate(const char *binfile, size_t load_offt, int opts, void *_win)
 {
-    struct memory_bank memory;
-    struct irid_reg regs = {0};
+    struct emulator_ctx context = {0};
     struct page_info *text_pages[2];
     struct page_info *cpu_page;
+    int crash_val;
 
-    bank_alloc(&memory, IRID_MAX_PAGES, 0);
-    load_file(memory.base_ptr, IRID_MAX_ADDR, load_offt, binfile);
+    context.win  = _win;
+    context.regs = calloc(sizeof(struct irid_reg), 1);
+    context.mem  = calloc(sizeof(struct memory_bank), 1);
+    context.is_silent = opts & IRID_EMUL_QUIET;
+
+    /*
+     * Setup the exception jump buffer. If the CPU fails, it will return here.
+     * This is done using setjmp/longjmp, because this function needs to return
+     * the error code back to the program without killing the whole program.
+     */
+    crash_val = setjmp(context.crash_ret);
+    if (crash_val)
+        goto end;
+
+    bank_alloc(context.mem, IRID_MAX_PAGES, 0);
+    load_file(context.mem->base_ptr, IRID_MAX_ADDR, load_offt, binfile);
 
     /*
      * Mark the last page as read-only, for cpucalls. The third and second last
      * pages are initiallly mapped to 80*25 screen I/O.
      */
 
-    cpu_page = &memory.page_info[memory.pages - 1];
-    text_pages[0] = &memory.page_info[memory.pages - 3];
-    text_pages[1] = &memory.page_info[memory.pages - 2];
+    cpu_page = &context.mem->page_info[context.mem->pages - 1];
+    text_pages[0] = &context.mem->page_info[context.mem->pages - 3];
+    text_pages[1] = &context.mem->page_info[context.mem->pages - 2];
 
     cpu_page->flags = PAGE_READ | PAGE_CPU;
     text_pages[0]->flags |= PAGE_TEXT;
@@ -60,34 +72,36 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
      */
 
     ir_half instruction, half_temp;
-    ir_word temp, temp2;
+    ir_word temp;
     ir_half *here;
 
     while (1) {
-        instruction = memory.base_ptr[regs.ip];
-        here        = &((ir_half *) memory.base_ptr)[regs.ip];
+        instruction = context.mem->base_ptr[context.regs->ip];
+        here        = &((ir_half *) context.mem->base_ptr)[context.regs->ip];
+
+        info("0x%02hhx", instruction);
 
         switch (instruction) {
             /* Push a value from a register onto the stack. */
             case I_PUSH:
-                temp = * (ir_word *) get_raddr(&regs, here[1]);
+                temp = * (ir_word *) get_raddr(&context, here[1]);
                 if (here[1] <= R_R7 || here[1] >= R_IP)
                     PUSH16(temp);
                 else
-                    PUSH8(*get_raddr(&regs, here[1]));
-                regs.ip += 2;
+                    PUSH8(*get_raddr(&context, here[1]));
+                context.regs->ip += 2;
                 break;
 
             /* Push an immediate value onto the stack. */
             case I_PUSH8:
                 PUSH8(here[1]);
-                regs.ip += 2;
+                context.regs->ip += 2;
                 break;
 
             /* Push an immediate value onto the stack. */
             case I_PUSH16:
                 PUSH16(* (ir_word *) (here + 1));
-                regs.ip += 3;
+                context.regs->ip += 3;
                 break;
 
             /* Pop a value off the stack into a register. */
@@ -95,90 +109,96 @@ int irid_emulate(const char *binfile, size_t load_offt, int _Unused opts)
                 if (here[1] <= R_R7 || here[1] >= R_IP) {
                     temp = POP16();
                     info("pop16=%x", temp);
-                    set_register16(&regs, here[1], temp);
+                    set_register16(&context, here[1], temp);
                 } else {
                     half_temp = POP8();
                     info("pop8=%x", half_temp);
-                    set_register8(&regs, here[1], half_temp);
+                    set_register8(&context, here[1], half_temp);
                 }
-                regs.ip += 2;
+                context.regs->ip += 2;
                 break;
 
             /* Move a value from a register to another register. */
             case I_MOV:
-                temp = * (ir_word *) get_raddr(&regs, here[2]);
+                temp = * (ir_word *) get_raddr(&context, here[2]);
                 if (here[1] <= R_R7 || here[1] >= R_IP)
-                    set_register16(&regs, here[1], temp);
+                    set_register16(&context, here[1], temp);
                 else
-                    set_register8(&regs, here[1], temp);
-                regs.ip += 3;
+                    set_register8(&context, here[1], temp);
+                context.regs->ip += 3;
                 break;
 
             /* Copy an 8-bit value to a register. */
             case I_MOV8:
-                set_register8(&regs, here[1], here[2]);
-                regs.ip += 3;
+                set_register8(&context, here[1], here[2]);
+                context.regs->ip += 3;
                 break;
 
             /* Copy a 16-bit value into a register. */
             case I_MOV16:
-                set_register16(&regs, here[1], * ((ir_word *)(here + 2)));
-                regs.ip += 4;
+                set_register16(&context, here[1], * ((ir_word *)(here + 2)));
+                context.regs->ip += 4;
                 break;
 
-            /* Load a value from memory pointed by [addr] to a register. */
+            /* Load contents of memory pointed by [rx] to [rx/hx]. */
             case I_LOAD:
-                temp = * (ir_word *) (here + 2);
-                if (here[1] <= R_R7 || here[1] >= R_IP)
-                    set_register16(&regs, here[1], read16(&memory, temp));
-                else
-                    set_register8(&regs, here[1], read8(&memory, temp));
-                regs.ip += 4;
+                temp = *get_raddr(&context, here[2]);
+                if (here[1] <= R_R7 || here[1] >= R_IP) {
+                    temp = read16(context.mem, temp);
+                    set_register16(&context, here[1], temp);
+                } else {
+                    half_temp = read8(context.mem, temp);
+                    set_register8(&context, here[1], half_temp);
+                }
+
+                context.regs->ip += 3;
                 break;
 
-            /* Store a value from a register into memory pointed by [addr]. */
+            /* Store contents of [rx/hx] to the address pointed by [rx]. */
             case I_STORE:
-                temp  = * (ir_word *) (here + 2);
-                temp2 = * (ir_word *) get_raddr(&regs, here[1]);
-                if (here[1] <= R_R7 || here[1] >= R_IP)
-                    write16(&memory, temp, temp2);
-                else
-                    write8(&memory, temp, *get_raddr(&regs, here[1]));
-                regs.ip += 4;
+                context.regs->ip += 3;
                 break;
 
             /* Reset a register. */
             case I_NULL:
                 if (here[1] <= R_R7 || here[1] >= R_IP)
-                    set_register16(&regs, here[1], 0);
+                    set_register16(&context, here[1], 0);
                 else
-                    set_register8(&regs, here[1], 0);
-                regs.ip += 2;
+                    set_register8(&context, here[1], 0);
+                context.regs->ip += 2;
                 break;
 
             /* Execute a CPU function. */
             case I_CPUCALL:
-                handle_cpucall(&memory, &regs);
-                regs.ip += 2;
+                handle_cpucall(&context);
+                context.regs->ip += 2;
                 break;
 
             default:
-                fail(&regs, "invalid instruction");
+                fail(&context, CPUFAULT_INS, "illegal instruction");
         }
 
-        if (regs.sf)
+        if (context.regs->sf)
             break;
     }
 
-    bank_free(&memory);
-    return 0;
+end:
+    bank_free(context.mem);
+    free(context.regs);
+    free(context.mem);
+    return crash_val;
 }
 
-static void handle_cpucall(struct memory_bank *mem, struct irid_reg *regs)
+#undef PUSH8
+#undef PUSH16
+#undef POP8
+#undef POP16
+
+static void handle_cpucall(struct emulator_ctx *ctx)
 {
-    switch (mem->base_ptr[regs->ip+1]) {
+    switch (ctx->mem->base_ptr[ctx->regs->ip+1]) {
         case CPUCALL_SHUTDOWN:
-            regs->sf = 1;
+            ctx->regs->sf = 1;
             break;
 
         case CPUCALL_RESTART:
@@ -188,19 +208,19 @@ static void handle_cpucall(struct memory_bank *mem, struct irid_reg *regs)
              * set to 0, the next iteration of the emulator loop will
              * automatically move to the start of memory.
              */
-            memset(regs, 0, sizeof(struct irid_reg));
+            memset(ctx->regs, 0, sizeof(struct irid_reg));
             break;
 
         case CPUCALL_FAULT:
-            fail(regs, "intentional cpufault");
+            fail(ctx, CPUFAULT_USER, "intentional cpufault");
             break;
 
         default:
-            fail(regs, "unknown cpucall");
+            fail(ctx, CPUFAULT_CPUCALL, "unknown cpucall");
     }
 }
 
-static ir_half *get_raddr(struct irid_reg *regs, ir_half id)
+static ir_half *get_raddr(struct emulator_ctx *ctx, ir_half id)
 {
     /*
      * Register IDs 0x00-0x07 are generic 16 bit registers. For a quick trick,
@@ -208,69 +228,64 @@ static ir_half *get_raddr(struct irid_reg *regs, ir_half id)
      * the irid_reg struct.
      */
 
+    info("%x", id);
+
     if (id <= R_R7) {
-        return ((ir_half *) regs) + (id << 1);
-    }
-    else if (id >= 0x70) {
-        ir_half *s = (ir_half *) (&regs->ip) + ((id - 0x70) << 1);
-        info("%p, %p", regs, s);
+        return ((ir_half *) ctx->regs) + (id << 1);
+    } else if (id >= R_IP && id <= R_BP) {
+        ir_half *s = (ir_half *) (&ctx->regs->ip) + ((id - 0x70) << 1);
         return s;
+    } else if (id >= R_H0 && id <= R_L3) {
+        return ((ir_half *) ctx->regs) + id - 0x10;
+    } else {
+        fail(ctx, CPUFAULT_REG, "unknown register ID");
     }
-    else if (id >= 0x10) {
-        return ((ir_half *) regs) + id - 0x10;
-    }
-    else
-        fail(regs, "unknown register ID");
 
     return NULL;
 }
 
-static void set_register8(struct irid_reg *regs, ir_half id, ir_half val)
+static void set_register8(struct emulator_ctx *ctx, ir_half id, ir_half val)
 {
-    ir_half *addr = get_raddr(regs, id);
+    ir_half *addr = get_raddr(ctx, id);
     *addr = val;
 }
 
-static void set_register16(struct irid_reg *regs, ir_half id, ir_word val)
+static void set_register16(struct emulator_ctx *ctx, ir_half id, ir_word val)
 {
-    ir_word *addr = (ir_word *) get_raddr(regs, id);
+    ir_word *addr = (ir_word *) get_raddr(ctx, id);
     *addr = val;
 }
 
-static inline void stack_push8(struct memory_bank *mem, struct irid_reg *regs,
-        ir_half val)
+static inline void stack_push8(struct emulator_ctx *ctx, ir_half val)
 {
-    if (regs->sp > regs->bp)
-        fail(regs, "stack overflow");
-    regs->sp -= 1;
-    mem->base_ptr[regs->sp] = val;
+    if (ctx->regs->sp > ctx->regs->bp)
+        fail(ctx, CPUFAULT_STACK, "stack overflow");
+    ctx->regs->sp -= 1;
+    ctx->mem->base_ptr[ctx->regs->sp] = val;
 }
 
-static inline void stack_push16(struct memory_bank *mem, struct irid_reg *regs,
-        ir_word val)
+static inline void stack_push16(struct emulator_ctx *ctx, ir_word val)
 {
-    if (regs->sp > regs->bp)
-        fail(regs, "stack overflow");
-    regs->sp -= 2;
-    * (ir_word *) (mem->base_ptr + regs->sp) = val;
+    if (ctx->regs->sp > ctx->regs->bp)
+        fail(ctx, CPUFAULT_STACK, "stack overflow");
+    ctx->regs->sp -= 2;
+    * (ir_word *) (ctx->mem->base_ptr + ctx->regs->sp) = val;
 }
 
-static inline ir_half stack_pop8(struct memory_bank *mem,
-        struct irid_reg *regs)
+static inline ir_half stack_pop8(struct emulator_ctx *ctx)
 {
-    if (regs->sp >= regs->bp)
-        fail(regs, "stack corruption, read above bp");
-    regs->sp += 1;
-    return mem->base_ptr[regs->sp - 1];
+    if (ctx->regs->sp >= ctx->regs->bp)
+        fail(ctx, CPUFAULT_STACK, "stack corruption, read above bp");
+    ctx->regs->sp += 1;
+    return ctx->mem->base_ptr[ctx->regs->sp - 1];
 }
 
-static inline ir_word stack_pop16(struct memory_bank *mem,
-        struct irid_reg *regs)
+static inline ir_word stack_pop16(struct emulator_ctx *ctx)
 {
-    if (regs->sp + 1 >= regs->bp)
-        fail(regs, "stack corruption, read above bp");
-    regs->sp += 2;
-    return * (ir_word *) (mem->base_ptr + regs->sp - 2);
+    if (ctx->regs->sp + 1 >= ctx->regs->bp)
+        fail(ctx, CPUFAULT_STACK, "stack corruption, read above bp");
+    ctx->regs->sp += 2;
+    return * (ir_word *) (ctx->mem->base_ptr + ctx->regs->sp - 2);
 }
 
 static void load_file(void *addr, size_t max, size_t off, const char *path)
@@ -291,14 +306,18 @@ static void load_file(void *addr, size_t max, size_t off, const char *path)
     }
 }
 
-static int text_page_handler(struct page_info *_Unused self, ir_word _Unused
-        vaddr)
+static int text_page_handler(struct page_info *_Unused page, ir_word vaddr)
 {
-    return 0;
+    return vaddr;
 }
 
-static void fail(struct irid_reg *regs, const char *msg)
+static void fail(struct emulator_ctx *ctx, int err, const char *msg)
 {
+    struct irid_reg *regs = ctx->regs;
+
+    if (ctx->is_silent)
+        goto crash;
+
     printf("\n\033[1;31mCPU fault:\033[1;39m %s\033[0m\n\n", msg);
 
     printf(
@@ -313,5 +332,10 @@ static void fail(struct irid_reg *regs, const char *msg)
         regs->cf, regs->zf, regs->of, regs->sf
     );
 
-    die("CPU fault");
+crash:
+    /*
+     * Return to the irid_emulate function by using longjmp. Set the crash_val
+     * to the error number, so the emulator can return it.
+     */
+    longjmp(ctx->crash_ret, err);
 }

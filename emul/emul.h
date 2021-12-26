@@ -7,6 +7,8 @@
 #include "emul_graphics.h"
 #include <irid/emul.h>
 #include <irid/arch.h>
+#include <stdbool.h>
+#include <setjmp.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -19,14 +21,19 @@
 # define info(...)
 #endif
 
+struct runtime;
+struct page_info;
+struct memory_bank;
+struct emulator_ctx;
+
 /* Runtime information. */
 
 struct runtime
 {
     int     argc;
-    char  **argv;
-    char   *binfile;
-    int     is_verbose;
+    char    **argv;
+    char    *binfile;
+    bool    is_headless;
     struct eg_window *win;
 };
 
@@ -49,7 +56,7 @@ struct page_info
     int      flags;
     ir_word  vaddr;
     char    *addr;
-    int    (*write_handler) (struct page_info *self, ir_word vaddr);
+    int    (*write_handler) (struct page_info *page, ir_word vaddr);
 };
 
 /*
@@ -62,6 +69,19 @@ struct memory_bank
     char             *base_ptr;
     size_t            pages;
     struct page_info *page_info;
+};
+
+/*
+ * Emulator context structure. Contains pointers to the memory bank and some
+ * other emulator settings.
+ */
+struct emulator_ctx
+{
+    struct memory_bank  *mem;
+    struct eg_window    *win;
+    struct irid_reg     *regs;
+    jmp_buf             crash_ret;
+    bool                is_silent;
 };
 
 /*

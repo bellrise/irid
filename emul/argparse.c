@@ -27,8 +27,7 @@ int argparse(struct runtime *rt, int argc, char **argv)
     return 0;
 }
 
-static void parse_opt(struct runtime *_Unused rt, int *i, int _Unused argc,
-        char **argv)
+static void parse_opt(struct runtime *rt, int *i, int _Unused argc, char **argv)
 {
     char *long_arg;
     size_t arglen;
@@ -53,6 +52,9 @@ static void parse_opt(struct runtime *_Unused rt, int *i, int _Unused argc,
             case 'v':
                 printf("%d\n", IRID_EMUL_VERID);
                 exit(1);
+            case 'w':
+                rt->is_headless = true;
+                break;
             default:
                 warn("unknown flag '%s'", argv[*i]);
         }
@@ -72,11 +74,12 @@ long_opt:
 static void usage()
 {
     printf(
-        "usage: irid-emul [-hv] [opt]... <file>\n\n"
+        "usage: irid-emul [-hvw] [opt]... <file>\n\n"
         "Emulate the Irid architecture.\n\n"
         "  file         the binary file to load at address 0x0000\n"
         "  -h, --help   show this and exit\n"
         "  -v           show the version ID\n"
+        "  -w           run headless (no window)\n"
         "  --version    show the full version and exit\n"
     );
 

@@ -1,4 +1,4 @@
 # Real  ID      Description
 0.1     1       Initial commit
 0.2     2       Add more instructions to emulator
-0.3     3       Change irid_emulate params, more instruction support
+0.3     3       Change irid_emulate signature, proper crash support
