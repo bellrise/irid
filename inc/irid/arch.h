@@ -111,8 +111,13 @@
  * which can be used to identify the problem.
  */
 
-#define CPUFAULT_SEG            0x01
-#define CPUFAULT_IO             0x02
+#define CPUFAULT_SEG            0x01        /* Segmentation fault */
+#define CPUFAULT_IO             0x02        /* IO fault */
+#define CPUFAULT_STACK          0x03        /* Stack corruption */
+#define CPUFAULT_REG            0x04        /* Invalid register */
+#define CPUFAULT_INS            0x05        /* Illegal instruction */
+#define CPUFAULT_USER           0x06        /* Forced fault */
+#define CPUFAULT_CPUCALL        0x07        /* Invalid CPU call */
 
 /*
  * Irid regular int & half int. All full 16-bit registers use the rint type

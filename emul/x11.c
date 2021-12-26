@@ -6,33 +6,23 @@
 #include <X11/Xutil.h>
 #include <string.h>
 #include <malloc.h>
+#include <unistd.h>
+#include <errno.h>
 
-
-/* Global last error instance. */
-static int glob_err = 0;
 
 /* X11 definition of the eg_window struct. */
 struct eg_window
 {
-    int     width;
-    int     height;
-
-    Display *dis;
-    int     scr;
-    Window  win;
-    GC      gcontext;
+    int         width;
+    int         height;
+    Display     *dis;
+    int         scr;
+    Window      win;
+    GC          gcontext;
+    XFontStruct *font;
+    int         glyph_w;
+    int         glyph_h;
 };
-
-/* Error names */
-const char *glob_strerrs[] = {
-    "Everything is fine",
-    "General failure",
-    "Invalid parameter",
-    "OS failure",
-    "Window server failure"
-};
-
-const int n_glob_strerrs = sizeof(glob_strerrs) / sizeof(char *);
 
 
 struct eg_window *eg_create_window(int width, int height)
@@ -42,9 +32,9 @@ struct eg_window *eg_create_window(int width, int height)
 
     /* Create and intialize the X11 window. */
 
-    win = malloc(sizeof(struct eg_window));
+    win = calloc(sizeof(struct eg_window), 1);
     if (!(win->dis = XOpenDisplay(NULL))) {
-        glob_err = EGE_WINSRV;
+        errno = EPROTO;
         return NULL;
     }
 
@@ -55,7 +45,8 @@ struct eg_window *eg_create_window(int width, int height)
 
     win->win = XCreateSimpleWindow(win->dis, DefaultRootWindow(win->dis), 0, 0,
             width, height, 5, white, black);
-    XSelectInput(win->dis, win->win, ExposureMask | KeyPressMask);
+    XSelectInput(win->dis, win->win, StructureNotifyMask | ExposureMask
+            | KeyPressMask);
 
     /* Create a graphics context. */
 
@@ -64,10 +55,33 @@ struct eg_window *eg_create_window(int width, int height)
     XSetBackground(win->dis, win->gcontext, black);
     XSetForeground(win->dis, win->gcontext, white);
 
+    /* Load a font. */
+
+    win->font = XLoadQueryFont(win->dis, "*-fixed-*-*-*-18-*");
+    if (!win->font) {
+        errno = ENOENT;
+        return NULL;
+    }
+
+    XSetFont(win->dis, win->gcontext, win->font->fid);
+    win->glyph_w = win->font->max_bounds.rbearing
+        - win->font->min_bounds.lbearing;
+    win->glyph_h = win->font->max_bounds.ascent
+        + win->font->max_bounds.descent;
+
     XClearWindow(win->dis, win->win);
     XMapRaised(win->dis, win->win);
 
     XSync(win->dis, False);
+
+    /* Wait for the map notify event, so we can actually draw stuff. */
+    while (1) {
+        XEvent ev;
+        XNextEvent(win->dis, &ev);
+
+        if (ev.type == MapNotify)
+            break;
+    }
 
     return win;
 }
@@ -75,43 +89,26 @@ struct eg_window *eg_create_window(int width, int height)
 int eg_close_window(struct eg_window *win)
 {
     if (!win)
-        return EGE_PARAM;
+        return EINVAL;
 
     XFreeGC(win->dis, win->gcontext);
+    XFreeFont(win->dis, win->font);
     XDestroyWindow(win->dis, win->win);
     XCloseDisplay(win->dis);
 
     free(win);
-    return EGE_OK;
+    return 0;
 }
 
-int eg_draw_text(struct eg_window *win, char *str, unsigned clr, int x,
-        int y)
+int eg_draw_text(struct eg_window *win, char *str, int row, int col)
 {
+    int x, y;
+
+    x = win->glyph_w * col;
+    y = win->glyph_h * (row + 1);
+
     XDrawString(win->dis, win->win, win->gcontext, x, y, str, strlen(str));
-
-    return EGE_OK;
-}
-
-int eg_draw_pixel(struct eg_window *win, unsigned clr, int x, int y)
-{
-    return EGE_OK;
-}
-
-int eg_get_last_error()
-{
-    return glob_err;
-}
-
-const char *eg_strerror(int err)
-{
-    if (err < 0)
-        err = -err;
-
-    if (err >= n_glob_strerrs)
-        return NULL;
-
-    return glob_strerrs[err];
+    return 0;
 }
 
 int eg_get_height(struct eg_window *win)
