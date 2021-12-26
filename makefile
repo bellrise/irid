@@ -16,6 +16,7 @@ emul: _setup
 ld: _setup
 
 asm: _setup
+	$(CC) -o build/irid-asm $(CFLAGS) $(shell find asm -name '*.c')
 
 clean:
 	rm -rf build

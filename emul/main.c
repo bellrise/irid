@@ -25,9 +25,8 @@ int main(int argc, char **argv)
             die("could not create window: %s", strerror(errno));
     }
 
-    if ((err = irid_emulate(rt.binfile, 0, 0, rt.win))) {
-        die("cpufault: 0x%02hhx", err);
-    }
+    if ((err = irid_emulate(rt.binfile, 0, 0, rt.win)))
+        die("cpufault 0x%02hhx", err);
 
     if (!rt.is_headless)
         eg_close_window(rt.win);
