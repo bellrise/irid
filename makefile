@@ -6,17 +6,18 @@
 
 CC 	   := clang
 CFLAGS := -Wall -Wextra -Iinc -lX11 -O0 -DDEBUG -fsanitize=address
+COMMON := common/info.c
 
 
 all: _setup emul ld asm
 
 emul: _setup
-	$(CC) -o build/irid-emul $(CFLAGS) $(shell find emul -name '*.c')
+	$(CC) -o build/irid-emul $(CFLAGS) $(shell find emul -name '*.c') $(COMMON)
 
 ld: _setup
 
 asm: _setup
-	$(CC) -o build/irid-asm $(CFLAGS) $(shell find asm -name '*.c')
+	$(CC) -o build/irid-asm $(CFLAGS) $(shell find asm -name '*.c') $(COMMON)
 
 clean:
 	rm -rf build

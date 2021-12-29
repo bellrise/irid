@@ -5,6 +5,7 @@
 #define EMUL_H
 
 #include "emul_graphics.h"
+#include <irid/common.h>
 #include <irid/emul.h>
 #include <irid/arch.h>
 #include <stdbool.h>
@@ -16,10 +17,14 @@
 
 #ifdef DEBUG
 /* info() is only called if DEBUG is defined. */
-# define info(...)  _info_internal(__func__, __VA_ARGS__)
+# define info(...)      _info_impl("irid-emul", __func__, __VA_ARGS__)
 #else
 # define info(...)
 #endif
+
+#define die(...)        _die_impl("irid-emul", __VA_ARGS__)
+#define warn(...)       _warn_impl("irid-emul", __VA_ARGS__)
+
 
 struct runtime;
 struct page_info;
@@ -133,32 +138,6 @@ void write16(struct memory_bank *mem, ir_word vaddr, ir_word val);
 int argparse(struct runtime *rt, int argc, char **argv);
 
 /*
- * Print an error message and exit.
- *
- * @param   fmt         printf-style format string
- * @parama  ...         printf params
- */
-int die(const char *fmt, ...);
-
-/*
- * Print a warning.
- *
- * @param   fmt         printf-style format string
- * @parama  ...         printf params
- */
-int warn(const char *fmt, ...);
-
-/*
- * Print an informational message. Be sure to call the info() macro instead,
- * which automatically disables this function is DEBUG is not defined.
- *
- * @param   func        function name
- * @param   fmt         printf-style format string
- * @param   ...         printf params
- */
-int _info_internal(const char *func, const char *fmt, ...);
-
-/*
  * Print the physical & virutal address and page flags. There are 6 flags:
  * r - readable, w - writable, c - cpu page, t - text page, d - device mapped,
  * h - has write handler.
@@ -166,14 +145,6 @@ int _info_internal(const char *func, const char *fmt, ...);
  * @param   page        pointer to page_info
  */
 void page_info_d(const struct page_info *const page);
-
-/*
- * Print n bytes in hex format, 16 bytes per line.
- *
- * @param   addr        address to start from
- * @param   amount      amount of bytes to print
- */
-void dbytes(void *addr, size_t amount);
 
 
 #endif /* EMUL_H */

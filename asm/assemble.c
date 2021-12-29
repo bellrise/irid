@@ -8,18 +8,11 @@ int irid_assemble(char *path, char *dest, int _Unused opts)
 {
     FILE *in, *out;
 
-    info("assembling %s -> %s", path, dest);
+    in  = fopen(path, "r");
+    out = fopen(dest, "wb");
 
-    /* Open both files. */
-
-    if (!(in = fopen(path, "r")))
-        die("failed to open %s", path);
-    if (!(out = fopen(dest, "wb"))) {
-        fclose(in);
-        die("failed to open %s", dest);
-    }
-
-    // TODO: assemble
+    if (!in || !out)
+        die("failed to open file %s", !in ? path : dest);
 
     fclose(in);
     fclose(out);

@@ -1,6 +1,7 @@
 /* Irid assembler internal header.
    Copyright (C) 2021 bellrise */
 
+#include <irid/common.h>
 #include <irid/asm.h>
 #include <string.h>
 #include <stdlib.h>
@@ -9,10 +10,13 @@
 #define _Unused     __attribute__((unused))
 
 #ifdef DEBUG
-# define info(...)      _info_internal(__func__, __VA_ARGS__)
+# define info(...)      _info_impl("irid-asm", __func__, __VA_ARGS__)
 #else
 # define info(...)
 #endif
+
+#define die(...)        _die_impl("irid-asm", __VA_ARGS__)
+#define warn(...)       _warn_impl("irid-asm", __VA_ARGS__)
 
 /* Runtime information. */
 
@@ -30,7 +34,3 @@ struct runtime
  * @param   argv        argv
  */
 int argparse(struct runtime *rt, int argc, char **argv);
-
-int die(const char *fmt, ...);
-int warn(const char *fmt, ...);
-int _info_internal(const char *func, const char *fmt, ...);
