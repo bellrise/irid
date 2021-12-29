@@ -3,22 +3,20 @@
 
 #include "asm.h"
 
-static struct runtime rt = {0};
-void free_resources();
+struct runtime *GLOB_RUNTIME;
 
 
 int main(int argc, char **argv)
 {
+    struct runtime rt = {0};
+    GLOB_RUNTIME = &rt;
+
     atexit(free_resources);
 
     if (argparse(&rt, --argc, ++argv) || !rt.nsources)
         die("no input files");
 
     irid_assemble(rt.sources[0], "out.bin", 0);
-}
 
-void free_resources()
-{
-    info("freeing resources");
-    free(rt.sources);
+    exit(0);
 }

@@ -77,8 +77,8 @@ Instruction set
     - jcs [rx] [addr]
         Jump to the given address, if the compare flag is set.
     - call [addr]
-        Jump to the given address, pushing r0-r5, sp, bp & ip on the stack to
-        be able to return to the previous function.
+        Jump to the given address, and push the current address so the CPU
+        can return from the called subroutine.
     - ret
         Return from a function, popping some data off the stack.
     - cpucall

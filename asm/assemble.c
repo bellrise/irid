@@ -6,6 +6,7 @@
 
 int irid_assemble(char *path, char *dest, int _Unused opts)
 {
+    struct asm_ctx context = {0};
     FILE *in, *out;
 
     in  = fopen(path, "r");
