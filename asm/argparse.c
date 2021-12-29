@@ -78,7 +78,6 @@ static void usage()
         "  -v           show the version ID\n"
         "  --version    show the full version and exit\n"
     );
-
     exit(0);
 }
 

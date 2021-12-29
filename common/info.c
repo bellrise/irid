@@ -1,7 +1,7 @@
 /* Common info/error/warn utilities.
    Copyright (C) 2021 bellrise */
 
-// #include <irid/common.h>
+#include <irid/common.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -40,7 +40,7 @@ int _info_impl(const char *prog, const char *func, const char *fmt, ...)
     va_list args;
     va_start(args, fmt);
 
-    fprintf(stderr, "%s: \033[1;36info: \033[0m(%s)\033[1;39m ", prog, func);
+    fprintf(stderr, "%s: \033[1;36minfo: \033[0m(%s)\033[1;39m ", prog, func);
     vfprintf(stderr, fmt, args);
     fprintf(stderr, "\033[0m\n");
 

@@ -82,7 +82,6 @@ static void usage()
         "  -w           run headless (no window)\n"
         "  --version    show the full version and exit\n"
     );
-
     exit(0);
 }
 
