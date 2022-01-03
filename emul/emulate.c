@@ -1,5 +1,5 @@
 /* Main emulator function, accessable from the outside.
-   Copyright (C) 2021 bellrise */
+   Copyright (C) 2021-2022 bellrise */
 
 #include "emul_graphics.h"
 #include <setjmp.h>

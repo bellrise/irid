@@ -1,5 +1,5 @@
 /* Code for handling memory.
-   Copyright (C) 2021 bellrise */
+   Copyright (C) 2021-2022 bellrise */
 
 #include <irid/arch.h>
 #include <sys/mman.h>

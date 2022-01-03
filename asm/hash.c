@@ -1,5 +1,5 @@
 /* Hash subroutine.
-   Copyright (C) 2021 bellrise */
+   Copyright (C) 2021-2022 bellrise */
 
 #include <stdint.h>
 #include "asm.h"

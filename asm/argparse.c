@@ -1,5 +1,5 @@
 /* Parse arguments.
-   Copyright (C) 2021 bellrise */
+   Copyright (C) 2021-2022 bellrise */
 
 #include "asm.h"
 
@@ -85,7 +85,7 @@ static void version()
 {
     printf(
         "irid-asm %s\n"
-        "Copyright (C) 2021 bellrise\n"
+        "Copyright (C) 2021-2022 bellrise\n"
         "source: https://github.com/bellrise/irid\n",
         IRID_ASM_VERSION
     );

@@ -1,12 +1,12 @@
 Irid architecture
 =================
 
-Irid is a 16-bit architecture with a simple instruction layout. The instruction
-itself only takes 8 bits, for 255 unique instructions which is more than enough.
+Irid is a 16-bit architecture with a simple instruction layout. Each instruction
+is always 4 bytes wide. For 255 unique instructions which is more than enough.
 Any bytes after that are just data. For example, the basic `mov` instruction
-takes a value in a register and copies it into a location in memory, or the other
-way around. One byte is used for `mov`, one for the register ID (for a max of 255
-registers), and two bytes for the address (each address takes 16 bits).
+takes a value in a register and copies it into a location in memory, or the
+other way around. One byte is used for `mov`, one for the register ID (for a max
+of 255 registers), and two bytes for the address (each address takes 16 bits).
 
 
 Registers

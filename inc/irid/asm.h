@@ -1,5 +1,5 @@
 /* Assembler API declarations.
-   Copyright (C) 2021 bellrise */
+   Copyright (C) 2021-2022 bellrise */
 
 #ifndef IRID_ASM_H
 #define IRID_ASM_H

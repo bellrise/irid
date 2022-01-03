@@ -1,5 +1,5 @@
 /* Irid emulator.
-   Copyright (C) 2021 bellrise */
+   Copyright (C) 2021-2022 bellrise */
 
 #include <irid/arch.h>
 #include <string.h>

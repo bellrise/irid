@@ -1,4 +1,4 @@
-# Copyright (C) 2021 bellrise
+# Copyright (C) 2021-2022 bellrise
 
 # A single makefile to build the whole project, for convenience. Some targets
 # may contain their custom makefile configurations. Call `make` to build the

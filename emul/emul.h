@@ -1,5 +1,5 @@
 /* Emulator internal definitions.
-   Copyright (C) 2021 bellrise */
+   Copyright (C) 2021-2022 bellrise */
 
 #ifndef EMUL_H
 #define EMUL_H
