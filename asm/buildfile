@@ -1,0 +1,4 @@
+cc          clang
+src         *.c ../common/info.c
+flags       -I../inc -Wall -Wextra -O2
+out         ../build/irid-asm

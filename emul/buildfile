@@ -1,0 +1,6 @@
+# Build irid-emul
+
+cc          clang
+src         *.c ../common/info.c
+flags       -I../inc -O2 -lX11 -Wall -Wextra
+out         ../build/irid-emul
