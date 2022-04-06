@@ -9,10 +9,10 @@
 # load h1, r0
 # cpucall fault
 sprog = b'\x16\x03\x22\x11'         \
-        b'\x16\x00\x3e\x00'         \
-        b'\x18\x03\x00'             \
-        b'\x17\x12\x00'             \
-        b'\x01\x14'
+		b'\x16\x00\x3e\x00'         \
+		b'\x18\x03\x00'             \
+		b'\x17\x12\x00'             \
+		b'\x01\x14'
 
 with open('test.bin', 'wb') as f:
-    f.write(sprog)
+	f.write(sprog)

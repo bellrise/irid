@@ -6,6 +6,6 @@
 
 void free_resources()
 {
-    info("freeing resources");
-    free(GLOB_RUNTIME->sources);
+	info("freeing resources");
+	free(GLOB_RUNTIME->sources);
 }

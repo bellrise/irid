@@ -6,16 +6,15 @@
 
 int irid_assemble(char *path, char *dest, int _Unused opts)
 {
-    struct asm_ctx context = {0};
-    FILE *in, *out;
+	struct asm_ctx context = {0};
 
-    in  = fopen(path, "r");
-    out = fopen(dest, "wb");
+	context.in  = fopen(path, "r");
+	context.out = fopen(dest, "wb");
 
-    if (!in || !out)
-        die("failed to open file %s", !in ? path : dest);
+	if (!context.in || !context.out)
+		die("failed to open file %s", !context.in ? path : dest);
 
-    fclose(in);
-    fclose(out);
-    return 1;
+	fclose(context.in);
+	fclose(context.out);
+	return 1;
 }

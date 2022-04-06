@@ -130,32 +130,32 @@ typedef unsigned char   ir_half;
 
 
 #define _irid_join_register(ID) union { ir_word r##ID; struct {             \
-    ir_half    h ## ID;                                                     \
-    ir_half    l ## ID;                                                     \
+	ir_half    h ## ID;                                                     \
+	ir_half    l ## ID;                                                     \
 }; }
 
 /* Irid register set. Note that the placement is intentional. */
 
 struct irid_reg
 {
-    /* ir_word r0, r1, r2, r3 */
-    /* ir_half h0, h1, h2, h3 */
-    /* ir_half l0, l1, l2, l3 */
-    _irid_join_register(0);
-    _irid_join_register(1);
-    _irid_join_register(2);
-    _irid_join_register(3);
+	/* ir_word r0, r1, r2, r3 */
+	/* ir_half h0, h1, h2, h3 */
+	/* ir_half l0, l1, l2, l3 */
+	_irid_join_register(0);
+	_irid_join_register(1);
+	_irid_join_register(2);
+	_irid_join_register(3);
 
-    ir_word r4, r5, r6, r7;
-    ir_word ip, sp, bp;         /* Instruction, stack & base ptr */
+	ir_word r4, r5, r6, r7;
+	ir_word ip, sp, bp;         /* Instruction, stack & base ptr */
 
-    struct
-    {
-        ir_word    cf : 1;      /* Compare flag */
-        ir_word    zf : 1;      /* Zero flag */
-        ir_word    of : 1;      /* Overflow flag */
-        ir_word    sf : 1;      /* Shutdown flag */
-    };
+	struct
+	{
+		ir_word    cf : 1;      /* Compare flag */
+		ir_word    zf : 1;      /* Zero flag */
+		ir_word    of : 1;      /* Overflow flag */
+		ir_word    sf : 1;      /* Shutdown flag */
+	};
 };
 
 #undef _irid_join_register

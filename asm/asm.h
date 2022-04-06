@@ -32,9 +32,9 @@ struct hashmap;
  */
 struct runtime
 {
-    int             nsources;
-    char            **sources;
-    struct asm_ctx  **contexts;
+	int             nsources;
+	char            **sources;
+	struct asm_ctx  **contexts;
 };
 
 /*
@@ -43,25 +43,25 @@ struct runtime
  */
 struct asm_ctx
 {
-    FILE    *in;                /* input */
-    FILE    *out;               /* output */
-    char    *path;              /* path to file */
-    int     pos[2];             /* line, pos */
+	FILE    *in;                /* input */
+	FILE    *out;               /* output */
+	char    *path;              /* path to file */
+	int     pos[2];             /* line, pos */
 };
 
 /* Hash map element. */
 struct hm_elem
 {
-    char *key;                  /* hashmap key */
+	char *key;                  /* hashmap key */
 
-    union
-    {
-        void    *vptr;          /* any pointer */
-        char    *vstr;          /* pointer to string */
-        size_t  vnum;           /* any number */
-    };
+	union
+	{
+		void    *vptr;          /* any pointer */
+		char    *vstr;          /* pointer to string */
+		size_t  vnum;           /* any number */
+	};
 
-    struct hm_elem *next;       /* pointer to next element */
+	struct hm_elem *next;       /* pointer to next element */
 };
 
 /*
@@ -74,12 +74,12 @@ struct hm_elem
  */
 struct hashmap
 {
-    size_t          size;       /* amount of filled elements */
-    size_t          space;      /* space in the hashmap */
-    struct hm_elem  **slots;    /* array of slots */
+	size_t          size;       /* amount of filled elements */
+	size_t          space;      /* space in the hashmap */
+	struct hm_elem  **slots;    /* array of slots */
 
-    size_t iter_pos[2];
-    int (*free_call) (struct hm_elem *item);
+	size_t iter_pos[2];
+	int (*free_call) (struct hm_elem *item);
 };
 
 /* Global runtime instance. */
@@ -162,8 +162,8 @@ struct hm_elem *hm_next(struct hashmap *hm);
  */
 inline void hm_reset_iter(struct hashmap *hm)
 {
-    hm->iter_pos[0] = 0;
-    hm->iter_pos[1] = 0;
+	hm->iter_pos[0] = 0;
+	hm->iter_pos[1] = 0;
 }
 
 /*
