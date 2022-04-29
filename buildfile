@@ -2,9 +2,9 @@
 # A single buildfile for the whole project.
 
 # If no target is defined, build the whole project.
-@__default  build _setup                \
-			&& build -f emul/buildfile  \
-			&& build -f asm/buildfile
+@default    build _setup &&\
+			build -f emul/buildfile &&\
+			build -f asm/buildfile
 
 @clean      rm -rf build
 @install    sh scripts/install
