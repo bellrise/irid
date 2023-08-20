@@ -74,9 +74,9 @@ Instruction set
         Unconditionally jump to the given address.
     - jnz [rx] [addr]
         Jump to the given address, if [rx] is not zero.
-    - jcs [rx] [addr]
+    - jeq [addr]
         Jump to the given address, if the compare flag is set.
-    - call [addr]
+    - call [rx/addr]
         Jump to the given address, and push the current address so the CPU
         can return from the called subroutine.
     - ret
@@ -90,6 +90,8 @@ Instruction set
         Add an immediate or register to a register.
     - sub [rx] [rz/imm8/imm16]
         Subtract an immediate or register from a register.
+    - mul [rx] [rz/imm8/imm16]
+        Multiply an immediate or register by [rx], storing the result in [rx].
     - and [rx] [rz/imm8/imm16]
         Logical AND two registers, storing the result in [rx].
     - or [rx] [rz/imm8/imm16]
@@ -105,17 +107,10 @@ Instruction set
 Memory layout
 -------------
 
-On launch, the CPU creates a memory layout with areas for restricted memory,
-which you can only read from. You may later change some of these areas using
-a cpucall. Because this is a 16-bit architecture, there are 64kB of memory.
-All memory is split into 64 pages, each being 1kB (1024 or 2^10 bytes) in size.
-
-    0x0000 - 0xf3ff     User memory
-    0xf400 - 0xfbff     Text mode video memory
-    0xfc00 - 0xffff     CPU page, read-only
-
-Any attempt to write to the CPU page will result in a segmentation fault,
-crashing the CPU.
+On launch, the CPU creates an empty memory layout. You may modify ranges of
+memory to interface with external devices using a cpucall. Because this is
+a 16-bit architecture, there is a maximum of 64kB of memory. All memory is
+split into 64 pages, each being 1kB (1024 or 2^10 bytes) in size.
 
 
 Calling convention
@@ -125,8 +120,11 @@ The Irid calling convention defines caller registers & callee registers. This
 means that some registers have to be stored be the caller, because the called
 subroutine may trash them.
 
-Caller-saved    r4, r5, r6, r7, ip, flags
-Callee-saved    r0, r1, r2, r3, l0, l2, l3, h0, h1, h2, h3, sp, bp
+Caller-saved    r0, r1, r2, r3, ip, flags
+Callee-saved    r4, r5, r6, r7, sp, bp
+
+Arguments       r0, r1, r2, r3
+Return value    r0
 
 r3, which is a callee-saved instruction means that it has to preserved for the
 caller. In this example, r3 is ensured to be the same after and before the call.
@@ -138,9 +136,8 @@ caller. In this example, r3 is ensured to be the same after and before the call.
 
 Passing arguments can happen in either registers or the stack, depending on the
 size and amount of arguments. If an argument fits in a register, it is passed
-in one starting from r4, up to r7. If the argument is larger than 16 bits,
+in one starting from r0, up to r3. If the argument is larger than 16 bits,
 a struct for example, it is passed on the stack.
-
 
 It is important to remember that Irid defines the stack pointers (sp & bp) to
 be callee-saved, meaning the stack cannot change after a call. When writing
@@ -149,18 +146,20 @@ it is good practice to place a preamble and an epilogue at each end.
 
     ; Preamble
     push sp
-    push r0
-    push r1
-    push r2
-    push r3
+    push bp
+    push r4
+    push r5
+    push r6
+    push r7
 
     ; ... code ...
 
     ; Epilogue
-    pop r3
-    pop r2
-    pop r1
-    pop r0
+    pop r7
+    pop r6
+    pop r5
+    pop r4
+    pop bp
     pop sp
 
 These operations can be made nicer with macros. Each of these registers is two
@@ -180,19 +179,7 @@ All parameters are passed in the general registers, starting from r0.
 Shut down the CPU. This will stop execution immediately.
 
 0x11
-Restart the CPU, resetting all registers, memory and instruction pointer to 0.
-Both the base & stack pointer are set to 0xffff, so if the user tries to use the
-stack before specifying a stack a segfault will happen.
+Restart the CPU, resetting all registers & jumping to 0x0000.
 
-0x12    [ptr]
-Get a device list.
-
-0x13    [mode] [width] [height]
-Change video mode. The mode can be either CPUCALL_VMOD_TXT or CPUCALL_VMOD_PIX.
-For text mode, no width or height is required.
-
-0x14    [addr]
-Set segmentation fault handler. The address points to a function, which would
-be the error handler, throwing/printing some message to the screen. In order
-to provide more information, the instruction pointer is stored into the r0
-register.
+0x12
+Force a CPU fault.

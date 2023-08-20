@@ -1,6 +1,0 @@
-# Build irid-emul
-
-cc          clang
-src         *.c ../common/info.c
-flags       -I../inc -O2 -lX11 -Wall -Wextra -Wno-unused-command-line-argument
-out         ../build/irid-emul

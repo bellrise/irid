@@ -1,0 +1,7 @@
+-Wall
+-Wextra
+-O0
+-ggdb
+-DDEBUG=1
+-fsanitize=address
+-xc++
