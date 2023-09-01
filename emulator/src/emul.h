@@ -144,6 +144,8 @@ struct cpu
             return reinterpret_cast<T *>(regptr<u8>(id - 0x10));
         return reinterpret_cast<T *>(regptr<u8>(id - 0x20) + 1);
     }
+
+    bool is_half_register(u8 id);
 };
 
 /* Dump `amount` bytes starting from `addr` to stdout. */

@@ -120,15 +120,15 @@ typedef unsigned short u16;
 typedef unsigned char u8;
 
 #define _irid_joined_register(ID)                                              \
- union                                                                         \
- {                                                                             \
-  u16 r##ID;                                                                   \
-  struct                                                                       \
-  {                                                                            \
-   u8 h##ID;                                                                   \
-   u8 l##ID;                                                                   \
-  };                                                                           \
- }
+    union                                                                      \
+    {                                                                          \
+        u16 r##ID;                                                             \
+        struct                                                                 \
+        {                                                                      \
+            u8 h##ID;                                                          \
+            u8 l##ID;                                                          \
+        };                                                                     \
+    }
 
 /* Irid CPU; registers & flags. */
 

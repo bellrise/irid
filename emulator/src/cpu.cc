@@ -39,8 +39,6 @@ void cpu::mainloop()
     while (1) {
         instr = m_mem.read8(m_reg.ip);
 
-        info("instr=%x", instr);
-
         /* Run instruction. */
         switch (instr) {
         case I_CPUCALL:
@@ -96,22 +94,22 @@ void cpu::mainloop()
             break;
         case I_JMP:
             jmp(m_mem.read16(m_reg.ip + 1));
-            break;
+            goto dont_step;
         case I_JNZ:
             jnz(m_mem.read8(m_reg.ip + 1), m_mem.read16(m_reg.ip + 2));
-            break;
+            goto dont_step;
         case I_JEQ:
             jeq(m_mem.read16(m_reg.ip + 1));
-            break;
+            goto dont_step;
         case I_CALL:
             call(m_mem.read16(m_reg.ip + 1));
-            break;
+            goto dont_step;
         case I_CALLR:
             callr(m_mem.read8(m_reg.ip + 1));
-            break;
+            goto dont_step;
         case I_RET:
             ret();
-            break;
+            goto dont_step;
         case I_ADD:
             add(m_mem.read8(m_reg.ip + 1), m_mem.read8(m_reg.ip + 2));
             break;
@@ -177,6 +175,8 @@ void cpu::mainloop()
         }
 
         m_reg.ip += 4;
+dont_step:
+        m_reg.ip += 0;
     }
 }
 
@@ -191,6 +191,11 @@ void cpu::dump_registers()
            m_reg.r0, m_reg.r1, m_reg.r2, m_reg.r3, m_reg.r4, m_reg.r5, m_reg.r6,
            m_reg.r7, m_reg.ip, m_reg.sp, m_reg.bp, m_reg.cf, m_reg.zf, m_reg.of,
            m_reg.sf);
+}
+
+bool cpu::is_half_register(u8 id)
+{
+    return id > R_H0 && id < R_L3;
 }
 
 void cpu::initialize()
@@ -212,14 +217,68 @@ void cpu::cpucall()
     }
 }
 
-void cpu::push(u8 src) { }
-void cpu::push8(u8 imm8) { }
-void cpu::push16(u16 imm16) { }
-void cpu::pop(u8 dest) { }
+void cpu::push(u8 src)
+{
+    if (m_reg.sp == 0)
+        throw cpu_fault(CPUFAULT_SEG);
+
+    if (is_half_register(src)) {
+        m_reg.sp -= 1;
+        m_mem.write8(m_reg.sp, *regptr<u8>(src));
+    } else {
+        m_reg.sp -= 2;
+        m_mem.write16(m_reg.sp, *regptr<u8>(src));
+    }
+}
+
+void cpu::push8(u8 imm8)
+{
+    if (m_reg.sp == 0)
+        throw cpu_fault(CPUFAULT_SEG);
+
+    m_reg.sp -= 1;
+    m_mem.write8(m_reg.sp, imm8);
+}
+
+void cpu::push16(u16 imm16)
+{
+    if (m_reg.sp == 0)
+        throw cpu_fault(CPUFAULT_SEG);
+
+    m_reg.sp -= 2;
+    m_mem.write16(m_reg.sp, imm16);
+}
+
+void cpu::pop(u8 dest)
+{
+    if (is_half_register(dest)) {
+        *regptr<u8>(dest) = m_mem.read8(m_reg.sp);
+        m_reg.sp += 1;
+    } else {
+        *regptr<u16>(dest) = m_mem.read16(m_reg.sp);
+        m_reg.sp += 2;
+    }
+}
 
 void cpu::mov(u8 dest, u8 src)
 {
-    *regptr<u16>(dest) = *regptr<u16>(src);
+    if (is_half_register(dest)) {
+        if (is_half_register(src)) {
+            // half <- half
+            *regptr<u8>(dest) = *regptr<u8>(src);
+        } else {
+            // half <- wide
+            *regptr<u8>(dest) = *regptr<u16>(src);
+        }
+    } else {
+        if (is_half_register(src)) {
+            // wide <- half
+            *regptr<u16>(dest) = *regptr<u8>(src);
+        } else {
+            // wide <- wide
+            *regptr<u16>(dest) = *regptr<u16>(src);
+        }
+    }
 }
 
 void cpu::mov8(u8 dest, u8 imm8)
@@ -229,41 +288,159 @@ void cpu::mov8(u8 dest, u8 imm8)
 
 void cpu::mov16(u8 dest, u16 imm16)
 {
-    *regptr<u16>(dest) = imm16;
+    if (is_half_register(dest))
+        *regptr<u8>(dest) = imm16;
+    else
+        *regptr<u16>(dest) = imm16;
 }
 
-void cpu::load(u8 dest, u8 srcptr) { }
-void cpu::store(u8 src, u8 destptr) { }
-void cpu::null(u8 dest) { }
-void cpu::cmp(u8 left, u8 right) { }
-void cpu::cmp8(u8 left, u8 imm8) { }
-void cpu::cmp16(u8 left, u16 imm16) { }
-void cpu::cmg(u8 left, u8 right) { }
-void cpu::cmg8(u8 left, u8 imm8) { }
-void cpu::cmg16(u8 left, u16 imm16) { }
-void cpu::jmp(u16 addr) { }
-void cpu::jnz(u8 cond, u16 addr) { }
-void cpu::jeq(u16 addr) { }
-void cpu::call(u16 addr) { }
-void cpu::callr(u8 srcaddr) { }
-void cpu::ret() { }
+void cpu::load(u8 dest, u8 srcptr)
+{
+    if (is_half_register(srcptr))
+        throw cpu_fault(CPUFAULT_REG);
+
+    if (is_half_register(dest))
+        *regptr<u8>(dest) = m_mem.read8(*regptr<u16>(srcptr));
+    else
+        *regptr<u16>(dest) = m_mem.read16(*regptr<u16>(srcptr));
+}
+
+void cpu::store(u8 src, u8 destptr)
+{
+    if (is_half_register(destptr))
+        throw cpu_fault(CPUFAULT_REG);
+
+    if (is_half_register(src))
+        m_mem.write8(*regptr<u16>(destptr), *regptr<u8>(src));
+    else
+        m_mem.write16(*regptr<u16>(destptr), *regptr<u16>(src));
+}
+
+void cpu::null(u8 dest)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) = 0;
+    else
+        *regptr<u16>(dest) = 0;
+}
+
+void cpu::cmp(u8 left, u8 right)
+{
+    m_reg.cf = 0;
+    if (*regptr<u16>(left) == *regptr<u16>(right))
+        m_reg.cf = 1;
+}
+
+void cpu::cmp8(u8 left, u8 imm8)
+{
+    m_reg.cf = 0;
+    if (*regptr<u16>(left) == (u16) imm8)
+        m_reg.cf = 1;
+}
+
+void cpu::cmp16(u8 left, u16 imm16)
+{
+    m_reg.cf = 0;
+    if (*regptr<u16>(left) == imm16)
+        m_reg.cf = 1;
+}
+
+void cpu::cmg(u8 left, u8 right)
+{
+    m_reg.cf = 0;
+    if (*regptr<u16>(left) > *regptr<u16>(right))
+        m_reg.cf = 1;
+}
+
+void cpu::cmg8(u8 left, u8 imm8)
+{
+    m_reg.cf = 0;
+    if (*regptr<u16>(left) > imm8)
+        m_reg.cf = 1;
+}
+
+void cpu::cmg16(u8 left, u16 imm16)
+{
+    m_reg.cf = 0;
+    if (*regptr<u16>(left) > imm16)
+        m_reg.cf = 1;
+}
+
+void cpu::jmp(u16 addr)
+{
+    m_reg.ip = addr;
+}
+
+void cpu::jnz(u8 cond, u16 addr)
+{
+    if (*regptr<u16>(cond))
+        m_reg.ip = addr;
+    else
+        m_reg.ip += 4;
+}
+
+void cpu::jeq(u16 addr)
+{
+    if (m_reg.cf)
+        m_reg.ip = addr;
+    else
+        m_reg.ip += 4;
+}
+
+void cpu::call(u16 addr)
+{
+    push16(m_reg.ip + 4);
+    m_reg.ip = addr;
+}
+
+void cpu::callr(u8 srcaddr)
+{
+    push16(m_reg.ip + 4);
+    m_reg.ip = *regptr<u16>(srcaddr);
+}
+
+void cpu::ret()
+{
+    m_reg.ip = m_mem.read16(m_reg.sp);
+    m_reg.sp += 2;
+}
+
 void cpu::add(u8 dest, u8 src) { }
+
 void cpu::add8(u8 dest, u8 imm8) { }
+
 void cpu::add16(u8 dest, u16 imm16) { }
+
 void cpu::sub(u8 dest, u8 src) { }
+
 void cpu::sub8(u8 dest, u8 imm8) { }
+
 void cpu::sub16(u8 dest, u16 imm16) { }
+
 void cpu::and_(u8 dest, u8 src) { }
+
 void cpu::and8(u8 dest, u8 imm8) { }
+
 void cpu::and16(u8 dest, u16 imm16) { }
+
 void cpu::or_(u8 dest, u8 src) { }
+
 void cpu::or8(u8 dest, u8 imm8) { }
+
 void cpu::or16(u8 dest, u16 imm16) { }
+
 void cpu::not_(u8 dest) { }
+
 void cpu::shr(u8 dest, u8 src) { }
+
 void cpu::shr8(u8 dest, u8 imm8) { }
+
 void cpu::shl(u8 dest, u8 src) { }
+
 void cpu::shl8(u8 dest, u8 imm8) { }
+
 void cpu::mul(u8 dest, u8 src) { }
+
 void cpu::mul8(u8 dest, u8 imm8) { }
+
 void cpu::mul16(u8 dest, u16 imm16) { }
