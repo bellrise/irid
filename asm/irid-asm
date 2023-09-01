@@ -39,7 +39,6 @@ class Assembler:
                 self._add_label(line, index)
             else:
                 self._die('unknown line')
-                exit(1)
 
     def dump_program(self, output_path: str):
         with open(output_path, 'wb') as f:
@@ -59,13 +58,27 @@ class Assembler:
         if dir == 'org':
             # TODO: make this support decimal
             self.pos = int(line.split()[1], 16)
+        elif dir == 'string':
+            data = line[6:].strip().strip('"')
+            self._insert_bytes(self.pos, bytes(data, 'ascii') + b'\0')
         else:
             self._die(index, f'unknown directive `{dir}`')
-            exit(1)
 
     def _add_label(self, line: str, index: int):
         line = line[:-1]
         self.labels[line] = self.pos
+
+    def _insert_bytes(self, pos: int, data):
+        if len(self.output) == pos:
+            self.output.extend(data)
+            self.pos += 4
+        elif len(self.output) < pos:
+            self.output.extend([0x00] * (pos - len(self.output)))
+            self.output.extend(data)
+            self.pos += 4
+        else:
+            for i in range(len(data)):
+                self.output[pos + i] = data[i]
 
     def _add_instruction(self, line: str, index: int):
         # Add instruction to binary output
@@ -79,16 +92,7 @@ class Assembler:
             self._die('unknown instruction')
 
         # Place the instruction in the binary
-        if len(self.output) == self.pos:
-            self.output.extend(ins)
-            self.pos += 4
-        elif len(self.output) < self.pos:
-            self.output.extend([0x00] * (self.pos - len(self.output)))
-            self.output.extend(ins)
-            self.pos += 4
-        else:
-            for i in range(0, 4):
-                self.output[self.pos + i] = ins[i]
+        self._insert_bytes(self.pos, ins)
 
     def _die(self, index: int, *errmsg):
         errmsg = ' '.join([str(x) for x in errmsg])
@@ -96,6 +100,7 @@ class Assembler:
         print(f'\033[90m{index: 3} |\033[0m', self.source[index])
         print('      \033[31m^')
         print(f'      {errmsg}\033[0m\n')
+        exit(1)
 
     def _register_id(self, name: str) -> int:
         register_map = {

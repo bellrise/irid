@@ -9,3 +9,5 @@ restart:
     ; Force the CPU to fault
     mov r0, 0x12
     cpucall
+
+.string "hello"
