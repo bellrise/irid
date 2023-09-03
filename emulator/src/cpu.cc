@@ -3,10 +3,12 @@
 
 #include "emul.h"
 
+#include <algorithm>
 #include <cstring>
 
 cpu::cpu(memory& memory)
     : m_mem(memory)
+    , m_devices()
 {
     initialize();
 }
@@ -30,6 +32,11 @@ void cpu::start()
             }
         }
     }
+}
+
+void cpu::add_device(const device& dev)
+{
+    m_devices.push_back(dev);
 }
 
 void cpu::mainloop()
@@ -212,8 +219,79 @@ void cpu::cpucall()
         throw cpucall_request(cpucall_request::RQ_RESTART);
     case CPUCALL_FAULT:
         throw cpu_fault(CPUFAULT_USER);
+    case CPUCALL_DEVICELIST:
+        cpucall_devicelist();
+        break;
+    case CPUCALL_DEVICEINFO:
+        cpucall_deviceinfo();
+        break;
+    case CPUCALL_DEVICEWRITE:
+        cpucall_devicewrite();
+        break;
+    case CPUCALL_DEVICEREAD:
+        cpucall_deviceread();
+        break;
     default:
         throw cpu_fault(CPUFAULT_CPUCALL);
+    }
+}
+
+void cpu::cpucall_devicelist()
+{
+    u16 pointer = m_reg.r1;
+    u16 maxlen = m_reg.r2;
+
+    u16 to_write = std::min(m_devices.size(), (size_t) maxlen);
+
+    u16 *ids = new u16[to_write];
+    for (size_t i = 0; i < to_write; i++)
+        ids[i] = m_devices[i].id;
+
+    /* Fill the array with IDs. */
+    m_mem.write_range(pointer, ids, to_write * sizeof(u16));
+
+    /* Tell the user how many we've filled. */
+    m_reg.r2 = to_write;
+
+    delete[] ids;
+}
+
+void cpu::cpucall_deviceinfo()
+{
+    struct irid_deviceinfo info;
+
+    for (size_t i = 0; i < m_devices.size(); i++) {
+        if (m_devices[i].id != m_reg.r1)
+            continue;
+
+        info.d_id = m_devices[i].id;
+        memset(info.d_name, 0, 14);
+        memcpy(info.d_name, m_devices[i].name,
+               std::min((size_t) 13, strlen(m_devices[i].name)));
+        m_mem.write_range(m_reg.r2, &info, sizeof(info));
+        break;
+    }
+}
+
+void cpu::cpucall_devicewrite()
+{
+    for (size_t i = 0; i < m_devices.size(); i++) {
+        if (m_devices[i].id != m_reg.r1)
+            continue;
+
+        m_devices[i].write(m_reg.h2);
+        break;
+    }
+}
+
+void cpu::cpucall_deviceread()
+{
+    for (size_t i = 0; i < m_devices.size(); i++) {
+        if (m_devices[i].id != m_reg.r1)
+            continue;
+
+        m_reg.h2 = m_devices[i].read();
+        break;
     }
 }
 
@@ -223,11 +301,13 @@ void cpu::push(u8 src)
         throw cpu_fault(CPUFAULT_SEG);
 
     if (is_half_register(src)) {
+        u8 val = *regptr<u8>(src);
         m_reg.sp -= 1;
-        m_mem.write8(m_reg.sp, *regptr<u8>(src));
+        m_mem.write8(m_reg.sp, val);
     } else {
+        u16 val = *regptr<u16>(src);
         m_reg.sp -= 2;
-        m_mem.write16(m_reg.sp, *regptr<u8>(src));
+        m_mem.write16(m_reg.sp, val);
     }
 }
 
@@ -252,11 +332,13 @@ void cpu::push16(u16 imm16)
 void cpu::pop(u8 dest)
 {
     if (is_half_register(dest)) {
-        *regptr<u8>(dest) = m_mem.read8(m_reg.sp);
+        u8 val = m_mem.read8(m_reg.sp);
         m_reg.sp += 1;
+        *regptr<u8>(dest) = val;
     } else {
-        *regptr<u16>(dest) = m_mem.read16(m_reg.sp);
+        u16 val = m_mem.read16(m_reg.sp);
         m_reg.sp += 2;
+        *regptr<u16>(dest) = val;
     }
 }
 
@@ -405,17 +487,53 @@ void cpu::ret()
     m_reg.sp += 2;
 }
 
-void cpu::add(u8 dest, u8 src) { }
+void cpu::add(u8 dest, u8 src)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) += *regptr<u8>(src);
+    else
+        *regptr<u16>(dest) += *regptr<u16>(dest);
+}
 
-void cpu::add8(u8 dest, u8 imm8) { }
+void cpu::add8(u8 dest, u8 imm8)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) += imm8;
+    else
+        *regptr<u16>(dest) += imm8;
+}
 
-void cpu::add16(u8 dest, u16 imm16) { }
+void cpu::add16(u8 dest, u16 imm16)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) += imm16;
+    else
+        *regptr<u16>(dest) += imm16;
+}
 
-void cpu::sub(u8 dest, u8 src) { }
+void cpu::sub(u8 dest, u8 src)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) -= *regptr<u8>(src);
+    else
+        *regptr<u16>(dest) -= *regptr<u16>(dest);
+}
 
-void cpu::sub8(u8 dest, u8 imm8) { }
+void cpu::sub8(u8 dest, u8 imm8)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) -= imm8;
+    else
+        *regptr<u16>(dest) -= imm8;
+}
 
-void cpu::sub16(u8 dest, u16 imm16) { }
+void cpu::sub16(u8 dest, u16 imm16)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) -= imm16;
+    else
+        *regptr<u16>(dest) -= imm16;
+}
 
 void cpu::and_(u8 dest, u8 src) { }
 

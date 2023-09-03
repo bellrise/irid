@@ -13,6 +13,14 @@
 #define IRID_PAGE_MASK      0xfc00
 
 /*
+ * Irid regular int & half int. All full 16-bit registers use the rint type
+ * instead of the iint type, because the signed bit needs to be ignored.
+ */
+
+typedef unsigned short u16;
+typedef unsigned char u8;
+
+/*
  * Register IDs. In the instruction format, registers are represented using
  * a single byte.
  */
@@ -94,9 +102,19 @@
  * call the I_CPUCALL instruction with the correct function in r0.
  */
 
-#define CPUCALL_POWEROFF 0x10
-#define CPUCALL_RESTART  0x11
-#define CPUCALL_FAULT    0x12
+#define CPUCALL_POWEROFF    0x10
+#define CPUCALL_RESTART     0x11
+#define CPUCALL_FAULT       0x12
+#define CPUCALL_DEVICELIST  0x13
+#define CPUCALL_DEVICEINFO  0x14
+#define CPUCALL_DEVICEWRITE 0x20
+#define CPUCALL_DEVICEREAD  0x21
+
+struct irid_deviceinfo
+{
+    u16 d_id;
+    u8 d_name[14];
+};
 
 /*
  * CPU fault IDs. Each possible CPU fault has a corresponding 8-bit number,
@@ -110,14 +128,6 @@
 #define CPUFAULT_INS     0x05 /* Illegal instruction */
 #define CPUFAULT_USER    0x06 /* Forced fault */
 #define CPUFAULT_CPUCALL 0x07 /* Invalid CPU call */
-
-/*
- * Irid regular int & half int. All full 16-bit registers use the rint type
- * instead of the iint type, because the signed bit needs to be ignored.
- */
-
-typedef unsigned short u16;
-typedef unsigned char u8;
 
 #define _irid_joined_register(ID)                                              \
     union                                                                      \

@@ -61,6 +61,8 @@ struct memory
     void read_range(u16 src, void *dest, u16 n);
     void write_range(u16 dest, void *src, u16 n);
 
+    void dump(u16 addr, u16 n);
+
   private:
     size_t m_totalsize;
     uint8_t *m_mem;
@@ -68,12 +70,16 @@ struct memory
     void checkaddr(u16 addr);
 };
 
+struct device;
+
 struct cpu
 {
     cpu(memory& memory);
     ~cpu();
 
     void start();
+
+    void add_device(const device& dev);
 
     /* CPU instructions. */
     void cpucall();
@@ -120,9 +126,15 @@ struct cpu
     void mul8(u8 dest, u8 imm8);
     void mul16(u8 dest, u16 imm16);
 
+    void cpucall_devicelist();
+    void cpucall_deviceinfo();
+    void cpucall_devicewrite();
+    void cpucall_deviceread();
+
   private:
     memory& m_mem;
     irid_reg m_reg;
+    std::vector<device> m_devices;
 
     void initialize();
     void mainloop();
@@ -146,6 +158,17 @@ struct cpu
     }
 
     bool is_half_register(u8 id);
+};
+
+struct device
+{
+    u16 id;
+    const char *name;
+
+    device(u16 id, const char *name);
+
+    std::function<void(u8)> write;
+    std::function<u8(void)> read;
 };
 
 /* Dump `amount` bytes starting from `addr` to stdout. */

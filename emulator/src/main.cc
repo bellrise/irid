@@ -34,6 +34,20 @@ int main(int argc, char **argv)
     ram.write_range(0, buf, fileinfo.st_size);
     free(buf);
 
+    /* Add a basic console device. */
+
+    device console = {0x1000, "console"};
+
+    console.read = []() {
+        return fgetc(stdin);
+    };
+
+    console.write = [](u8 byte) {
+        fputc(byte, stdout);
+    };
+
+    cpu.add_device(console);
+
     /* Run the CPU. */
 
     cpu.start();

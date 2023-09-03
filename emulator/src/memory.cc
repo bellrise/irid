@@ -44,8 +44,9 @@ u16 memory::read16(u16 addr)
 
 void memory::write16(u16 addr, u16 value)
 {
-    write8(addr, ((u8 *) &value)[0]);
-    write8(addr + 1, ((u8 *) &value)[1]);
+    u8 *b = reinterpret_cast<u8 *>(&value);
+    write8(addr, b[0]);
+    write8(addr + 1, b[1]);
 }
 
 void memory::read_range(u16 src, void *dest, u16 n)
@@ -56,6 +57,11 @@ void memory::read_range(u16 src, void *dest, u16 n)
 void memory::write_range(u16 dest, void *src, u16 n)
 {
     std::memcpy(&m_mem[dest], src, n);
+}
+
+void memory::dump(u16 addr, u16 n)
+{
+    dbytes(&m_mem[addr], n);
 }
 
 void memory::checkaddr(u16 addr)
