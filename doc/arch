@@ -176,10 +176,31 @@ Using a CPU call you can map memory to a certain device or shut down the CPU.
 All parameters are passed in the general registers, starting from r0.
 
 0x10
-Shut down the CPU. This will stop execution immediately.
+    Shut down the CPU. This will stop execution immediately.
 
 0x11
-Restart the CPU, resetting all registers & jumping to 0x0000.
+    Restart the CPU, resetting all registers & jumping to 0x0000.
 
 0x12
-Force a CPU fault.
+    Force a CPU fault.
+
+0x13
+    | r1: pointer to u16[]
+    | r2: array capacity
+    Query the device IDs. Provide a pointer to an array in r1, and the length
+    of the array in r2. The CPU will then fill the u16[] array with device IDs
+    and set the amount of devices back in r2.
+
+0x14
+    | r1: device ID
+    | r2: pointer to device info struct
+    Query the device info.
+
+0x20
+    | r1: device ID
+    | h2: byte to write
+    Write a byte stored in h2 to the device defined in r1.
+
+0x21
+    | r1: device ID
+    Read a byte to h2 from the device defined in r1.
