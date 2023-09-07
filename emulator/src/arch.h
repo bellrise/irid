@@ -52,6 +52,9 @@ typedef unsigned char u8;
 
 #define I_NOP     0x00
 #define I_CPUCALL 0x01
+#define I_RTI     0x02
+#define I_STI     0x03
+#define I_DSI     0x04
 /* reserved */
 #define I_PUSH   0x10
 #define I_PUSH8  0x11
@@ -107,8 +110,10 @@ typedef unsigned char u8;
 #define CPUCALL_FAULT       0x12
 #define CPUCALL_DEVICELIST  0x13
 #define CPUCALL_DEVICEINFO  0x14
+#define CPUCALL_DEVICEINTR  0x15
 #define CPUCALL_DEVICEWRITE 0x20
 #define CPUCALL_DEVICEREAD  0x21
+#define CPUCALL_DEVICEPOLL  0x22
 
 struct irid_deviceinfo
 {

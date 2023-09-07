@@ -5,9 +5,15 @@
 
 #include <algorithm>
 #include <cstring>
+#include <stdio.h>
+#include <sys/signal.h>
+#include <termios.h>
+#include <unistd.h>
 
 cpu::cpu(memory& memory)
     : m_mem(memory)
+    , m_interrupts(false)
+    , m_in_interrupt(false)
     , m_devices()
 {
     initialize();
@@ -15,8 +21,28 @@ cpu::cpu(memory& memory)
 
 cpu::~cpu() { }
 
+void handle_ctrlc(int __attribute__((unused)) sig)
+{
+    printf("\n\r");
+
+    struct termios term;
+    tcgetattr(STDIN_FILENO, &term);
+    term.c_lflag |= ICANON | ECHO;
+    tcsetattr(STDIN_FILENO, 0, &term);
+
+    exit(0);
+}
+
 void cpu::start()
 {
+    /* Disable canonical mode on stdin. */
+    struct termios term;
+    tcgetattr(STDIN_FILENO, &term);
+    term.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, 0, &term);
+
+    signal(SIGINT, handle_ctrlc);
+
     while (1) {
         try {
             mainloop();
@@ -44,12 +70,28 @@ void cpu::mainloop()
     u8 instr;
 
     while (1) {
+        /* Before we load & run another instruction, poll all devices for any
+           incoming data. We also have to wait with polling the devices after
+           we exit any currently-being-processed interrupts. */
+
+        if (m_interrupts && !m_in_interrupt)
+            poll_devices();
+
         instr = m_mem.read8(m_reg.ip);
 
         /* Run instruction. */
         switch (instr) {
         case I_CPUCALL:
             cpucall();
+            break;
+        case I_RTI:
+            rti();
+            goto dont_step;
+        case I_STI:
+            m_interrupts = true;
+            break;
+        case I_DSI:
+            m_interrupts = false;
             break;
         case I_PUSH:
             push(m_mem.read8(m_reg.ip + 1));
@@ -187,6 +229,27 @@ dont_step:
     }
 }
 
+void cpu::poll_devices()
+{
+    for (size_t i = 0; i < m_devices.size(); i++) {
+        if (!m_devices[i].handlerptr || !m_devices[i].poll)
+            continue;
+
+        if (m_devices[i].poll())
+            issue_interrupt(m_devices[i].handlerptr);
+    }
+}
+
+void cpu::issue_interrupt(u16 addr)
+{
+    /* Before executing the interrupt function, the CPU caches all registers to
+       be restored when rti is called. */
+
+    m_in_interrupt = true;
+    m_reg_cache = m_reg;
+    m_reg.ip = addr;
+}
+
 void cpu::dump_registers()
 {
     printf("\n\033[1;31mCPU fault\033[0m\n\n");
@@ -225,6 +288,9 @@ void cpu::cpucall()
     case CPUCALL_DEVICEINFO:
         cpucall_deviceinfo();
         break;
+    case CPUCALL_DEVICEINTR:
+        cpucall_deviceintr();
+        break;
     case CPUCALL_DEVICEWRITE:
         cpucall_devicewrite();
         break;
@@ -234,6 +300,12 @@ void cpu::cpucall()
     default:
         throw cpu_fault(CPUFAULT_CPUCALL);
     }
+}
+
+void cpu::rti()
+{
+    m_in_interrupt = false;
+    m_reg = m_reg_cache;
 }
 
 void cpu::cpucall_devicelist()
@@ -269,6 +341,17 @@ void cpu::cpucall_deviceinfo()
         memcpy(info.d_name, m_devices[i].name,
                std::min((size_t) 13, strlen(m_devices[i].name)));
         m_mem.write_range(m_reg.r2, &info, sizeof(info));
+        break;
+    }
+}
+
+void cpu::cpucall_deviceintr()
+{
+    for (size_t i = 0; i < m_devices.size(); i++) {
+        if (m_devices[i].id != m_reg.r1)
+            continue;
+
+        m_devices[i].handlerptr = m_reg.r2;
         break;
     }
 }

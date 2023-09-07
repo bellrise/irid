@@ -83,6 +83,7 @@ struct cpu
 
     /* CPU instructions. */
     void cpucall();
+    void rti();
     void push(u8 src);
     void push8(u8 imm8);
     void push16(u16 imm16);
@@ -128,16 +129,22 @@ struct cpu
 
     void cpucall_devicelist();
     void cpucall_deviceinfo();
+    void cpucall_deviceintr();
     void cpucall_devicewrite();
     void cpucall_deviceread();
 
   private:
     memory& m_mem;
     irid_reg m_reg;
+    irid_reg m_reg_cache;
+    bool m_interrupts;
+    bool m_in_interrupt;
     std::vector<device> m_devices;
 
     void initialize();
     void mainloop();
+    void poll_devices();
+    void issue_interrupt(u16 addr);
     void dump_registers();
 
     template <typename T>
@@ -163,12 +170,14 @@ struct cpu
 struct device
 {
     u16 id;
+    u16 handlerptr;
     const char *name;
 
     device(u16 id, const char *name);
 
     std::function<void(u8)> write;
     std::function<u8(void)> read;
+    std::function<bool(void)> poll;
 };
 
 /* Dump `amount` bytes starting from `addr` to stdout. */

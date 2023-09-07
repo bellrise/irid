@@ -6,8 +6,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+void add_keyboard_device(cpu&);
 
 int main(int argc, char **argv)
 {
@@ -34,8 +37,14 @@ int main(int argc, char **argv)
     ram.write_range(0, buf, fileinfo.st_size);
     free(buf);
 
-    /* Add a basic console device. */
+    add_keyboard_device(cpu);
 
+    /* Run the CPU. */
+    cpu.start();
+}
+
+void add_keyboard_device(cpu& cpu)
+{
     device console = {0x1000, "console"};
 
     console.read = []() {
@@ -44,11 +53,17 @@ int main(int argc, char **argv)
 
     console.write = [](u8 byte) {
         fputc(byte, stdout);
+        fflush(stdout);
+    };
+
+    console.poll = []() {
+        struct pollfd poll_rq;
+        poll_rq.fd = STDIN_FILENO;
+        poll_rq.events = POLLIN;
+
+        poll(&poll_rq, 1, 0);
+        return poll_rq.revents & POLLIN;
     };
 
     cpu.add_device(console);
-
-    /* Run the CPU. */
-
-    cpu.start();
 }

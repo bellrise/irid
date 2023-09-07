@@ -5,5 +5,6 @@
 
 device::device(u16 id, const char *name)
     : id(id)
+    , handlerptr(0)
     , name(name)
 { }
