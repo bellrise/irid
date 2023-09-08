@@ -5,6 +5,25 @@ import argparse
 import struct
 
 
+def parse_value(src: str) -> int:
+    if src[0] == "'" and len(src) >= 3:
+        if src[1] == '\\':
+            # special char
+            special_chars = {
+                'n': '\n',
+                'r': '\r',
+                't': '\t',
+                'b': '\b'
+            }
+
+            return ord(special_chars.get(src[2], '?'))
+        return ord(src[1])
+
+    if src.startswith('0x'):
+        return int(src, 16)
+    else:
+        return int(src)
+
 class Line:
     """Represents a single line. """
 
@@ -18,11 +37,17 @@ class Line:
     def _split_into_parts(self, string: str) -> list[str]:
         parts = []
         buf = ''
-        in_string = False
+        in_string = None
 
         for c in string:
-            if c == '"':
-                in_string = not in_string
+            if c == '"' and in_string == '"':
+                in_string = None
+            if c == '"' and not in_string:
+                in_string = '"'
+            if c == "'" and in_string == "'":
+                in_string = None
+            if c == "'" and not in_string:
+                in_string = "'"
 
             if not in_string and c.isspace() and len(buf):
                 parts.append(buf)
@@ -80,6 +105,9 @@ class Assembler:
     pos: int            # current position in binary file
     labels: dict        # list of labels
     link_points: list   # list of locations to link
+    last_label: str     # last major label
+
+    INVALID_REG = -1
 
     def __init__(self, input_path: str):
         with open(input_path) as f:
@@ -110,6 +138,7 @@ class Assembler:
             else:
                 self._die(index, 'unknown line')
 
+        filled_link_points = []
         for link_point in self.link_points:
             if link_point['symbol'] not in self.labels:
                 self._die(link_point['index'],
@@ -117,49 +146,123 @@ class Assembler:
 
             self._insert_bytes(link_point['at'],
                                self._split_imm16(self.labels[link_point['symbol']]))
+            filled_link_points.append(link_point)
+
+        for link_point in self.link_points:
+            if link_point not in filled_link_points:
+                self._die(link_point['index'], f'`{link_point["symbol"]}` was not linked')
 
 
     def dump_program(self, output_path: str):
         with open(output_path, 'wb') as f:
             f.write(self.output)
 
+    def dump_symbols(self):
+        print(f'Symbols in {self.source_path}:')
+        syms = {}
+        for k, v in self.labels.items():
+            syms[v] = k
+
+        for addr in sorted(syms.keys()):
+            print(f'  {addr:04x} {syms[addr]}')
+
     def _clean_up(self):
         # Remove comments & newlines.
         for index, line in enumerate(self.source):
+            # Remove comments starting from the middle of the line.
+            in_string = None
+            comment_start = None
+
+            for i, char in enumerate(line):
+                if char == '"' and in_string == '"':
+                    in_string = None
+                if char == '"' and not in_string:
+                    in_string = '"'
+                if char == "'" and in_string == "'":
+                    in_string = None
+                if char == "'" and not in_string:
+                    in_string = "'"
+
+                if not in_string and char == ';':
+                    comment_start = i
+                    break
+
+            if comment_start:
+                line = line[:comment_start]
             self.source[index] = line.rstrip()
             if line.strip().startswith(';') or not line.strip():
                 self.source[index] = None
+
+    def _parse_string(self, source: str) -> bytes:
+        special_chars = {
+            'n': '\n',
+            'r': '\r',
+            't': '\t',
+            'b': '\b'
+        }
+
+        s = source.strip('"')
+        for char, val in special_chars.items():
+            s = s.replace('\\' + char, val)
+
+        return bytes(s, 'ascii')
 
     def _parse_directive(self, line: Line, index: int):
         dir = line.part(0)[1:]
 
         if dir == 'org':
-            # TODO: make this support decimal
-            self.pos = int(line.part(1), 16)
+            # Move to another origin point
+            self.pos = parse_value(line.part(1))
         elif dir == 'string':
-            data = line[6:].strip().strip('"')
-            self._insert_bytes(self.pos, bytes(data, 'ascii') + b'\0')
+            # Place a string in memory
+            data = line.part(1)
+            s = self._parse_string(data) + b'\0'
+            self._insert_bytes(self.pos, s, auto_offset=False)
+            self.pos += len(s)
+        elif dir == 'res':
+            # Reserve n bytes
+            b = b'\0' * parse_value(line.part(1))
+            self._insert_bytes(self.pos, b, auto_offset=True)
+        elif dir == 'byte':
+            # Place a byte (u8)
+            initial_value = parse_value(line.part(1))
+            self._insert_bytes(self.pos, [initial_value], auto_offset=True)
+        elif dir == 'word':
+            # Place a word (u16)
+            initial_value = parse_value(line.part(1))
+            bytes_value = self._split_imm16(initial_value)
+            self._insert_bytes(self.pos, bytes_value, auto_offset=True)
         else:
             self._die(index, f'unknown directive `{dir}`')
 
     def _add_label(self, line: Line, index: int):
-        self.labels[line.part(0)[:-1]] = self.pos
+        label = line.part(0).strip(':')
+        if not label.startswith('@'):
+            # Regular label
+            self.labels[label] = self.pos
+            self.last_label = label
+        else:
+            # Local label
+            self.labels[self.last_label + label] = self.pos
 
-    def _insert_bytes(self, pos: int, data):
+    def _insert_bytes(self, pos: int, data, auto_offset=True):
         if len(self.output) == pos:
             self.output.extend(data)
-            self.pos += 4
         elif len(self.output) < pos:
             self.output.extend([0x00] * (pos - len(self.output)))
             self.output.extend(data)
-            self.pos += 4
         else:
             for i in range(len(data)):
                 self.output[pos + i] = data[i]
+        if auto_offset:
+            self.pos += len(data)
 
     def _add_instruction(self, line: Line, index: int):
         # Add instruction to binary output
-        # TODO: actually parse the instruction
+
+        # Align pos to a 4 byte boundry.
+        if self.pos % 4:
+            self.pos += 4 - (self.pos % 4)
 
         title = line.part(0)
         method = getattr(self, f'_ins_{title}', None)
@@ -168,8 +271,11 @@ class Assembler:
         else:
             self._die(index, 'unknown instruction')
 
-        # Place the instruction in the binary
+        # Place the instruction in the binary.
         self._insert_bytes(self.pos, ins)
+
+    def _is_symbol(self, string: str) -> bool:
+        return string[0].isalpha() or string[0] == '@'
 
     def _die(self, index: int, *errmsg):
         errmsg = ' '.join([str(x) for x in errmsg])
@@ -200,7 +306,7 @@ class Assembler:
                 continue
             if name[0] == k[0]:
                 return v + int(name[1:])
-        return 0xff
+        return self.INVALID_REG
 
     def _is_wide_register(self, name: str) -> bool:
         return name in ['ip', 'sp', 'bp'] or name.startswith('r')
@@ -211,37 +317,66 @@ class Assembler:
     def _split_imm16(self, imm: int) -> list:
         return [imm - ((imm // 256) * 256), imm // 256]
 
-    def _ins_mov(self, line: Line, index: int) -> list:
+    def _parse_symbol(self, sym: str) -> str:
+        if sym.startswith('@'):
+            sym = self.last_label + sym
+        return sym
+
+    def _make_r816_instruction(self, line: Line, index: int,
+                               r_ins: int, r_8: int, r_16: int) -> list:
         dest = line.part(1).strip(',')
-        rid = self._register_id(dest)
-        if rid == 0xff:
+        src = line.part(2)
+
+        dest_reg = self._register_id(dest)
+
+        # First argument is always a register
+        if dest_reg == self.INVALID_REG:
             self._die(index, f'unknown register `{dest}`')
 
-        if line.part(2)[0].isalpha():
-            # add register
-            src = self._register_id(line.part(2))
-            if src == 0xff:
-                # this is not a register, probably a label
-                self.link_points.append({
-                    'symbol': line.part(2),
-                    'at': self.pos + 2,
-                    'index': index
-                })
-                return [0x16, rid, 0x00, 0x00]
+        # If the second argument is a symbol, it may a register or label.
+        if self._is_symbol(src):
+            # Check for a register
+            src_reg = self._register_id(src)
+            if src_reg != self.INVALID_REG:
+                # ins rx, rx
+                return [r_ins, dest_reg, src_reg, 0x00]
 
-            return [0x14, rid, 0x00, 0x00]
+            # If not a register, than a symbol.
+            self.link_points.append({
+                'symbol': self._parse_symbol(src),
+                'at': self.pos + 2,
+                'index': index
+            })
+            # ins rx, imm16
+            return [r_16, dest_reg, 0x00, 0x00]
 
-        # Check the value for mov8 & mov16 semantics.
-        val = line.int_value(2)
-        if val >= 256:
-            if self._is_half_register(dest):
-                self._die(index, f'`{dest}` cannot fit a value of `{line.part(2)}`');
-            # mov16
-            v = self._split_imm16(val)
-            return [0x16, rid, v[0], v[1]]
+        # Immediate value
+        imm = parse_value(src)
+        if imm >= 256:
+            imm = self._split_imm16(imm)
+            # ins rx, imm16
+            return [r_16, dest_reg, imm[0], imm[1]]
 
-        # mov8
-        return [0x15, rid, val, 0x00]
+        # ins rx, imm8
+        return [r_8, dest_reg, imm, 0x00]
+
+    def _ins_mov(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x14, 0x15, 0x16)
+
+    def _ins_load(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x17, 0x23, 0x23)
+
+    def _ins_store(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x18, 0x24, 0x24)
+
+    def _ins_cmp(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x1a, 0x1b, 0x1c)
+
+    def _ins_cmg(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x1d, 0x1e, 0x1f)
+
+    def _ins_cml(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x20, 0x21, 0x22)
 
     def _ins_cpucall(self, line: Line, index: int) -> list:
         return [0x01, 0x00, 0x00, 0x00]
@@ -256,24 +391,30 @@ class Assembler:
         return [0x04, 0x00, 0x00, 0x00]
 
     def _ins_call(self, line: Line, index: int) -> list:
-        if line.part(1)[0].isalpha():
-            # call symbol
-            self.link_points.append({
-                'symbol': line.part(1),
-                'at': self.pos + 1,
-                'index': index
-            })
-            return [0x33, 0xff, 0xff, 0x00]
+        arg = line.part(1)
+        r0 = self._register_id(arg)
+        if r0 != self.INVALID_REG:
+            # Call address from register
+            return [0x34, r0, 0x00, 0x00]
 
-        # call addr
-        addr = self._split_imm16(line.int_value(1))
-        return [0x33, addr[0], addr[1], 0x00]
+        if not self._is_symbol(arg):
+            # A immediate address
+            addr = self._split_imm16(line.int_value(1))
+            return [0x33, addr[0], addr[1], 0x00]
+
+        # Call a symbol (link after)
+        self.link_points.append({
+            'symbol': line.part(1),
+            'at': self.pos + 1,
+            'index': index
+        })
+        return [0x33, 0x00, 0x00, 0x00]
 
     def _ins_push(self, line: Line, index: int) -> list:
         if line.part(1)[0].isalpha():
             # push register
             rid = self._register_id(line.part(1))
-            if rid == 0xff:
+            if rid == self.INVALID_REG:
                 self._die(index, f'unknown register `{line.part(1)}`')
             return [0x10, rid, 0x00, 0x00]
 
@@ -287,63 +428,71 @@ class Assembler:
         return [0x11, v, 0x00, 0x00]
 
     def _ins_add(self, line: Line, index: int) -> list:
-        dest = line.part(1).strip(',')
-        rid = self._register_id(dest)
-        if rid == 0xff:
-            self._die(index, f'unknown register `{dest}`')
-
-        if line.part(2)[0].isalpha():
-            # add register
-            src = self._register_id(line.part(2))
-            if src == 0xff:
-                self._die(index, f'unknown register `{line.part(2)}`')
-            return [0x36, rid, src, 0x00]
-
-        v = line.int_value(2)
-        if v >= 256:
-            # add16
-            v = self._split_imm16(v)
-            return [0x38, rid, v[0], v[1]]
-
-        # add8
-        return [0x37, rid, v, 0x00]
+        return self._make_r816_instruction(line, index, 0x36, 0x37, 0x38)
 
     def _ins_sub(self, line: Line, index: int) -> list:
-        dest = line.part(1).strip(',')
-        rid = self._register_id(dest)
-        if rid == 0xff:
+        return self._make_r816_instruction(line, index, 0x39, 0x3a, 0x3b)
+
+    def _ins_and(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x3c, 0x3d, 0x3e)
+
+    def _ins_or(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x3f, 0x40, 0x41)
+
+    def _ins_not(self, line: Line, index: int) -> list:
+        dest = line.part(1)
+        dest_reg = self._register_id(dest)
+        if dest_reg == self.INVALID_REG:
             self._die(index, f'unknown register `{dest}`')
+        return [0x42, dest_reg, 0x00, 0x00]
 
-        if line.part(2)[0].isalpha():
-            # sub register
-            src = self._register_id(line.part(2))
-            if src == 0xff:
-                self._die(index, f'unknown register `{line.part(2)}`')
-            return [0x39, rid, src, 0x00]
+    def _ins_shr(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x43, 0x44, 0x44)
 
-        v = line.int_value(2)
-        if v >= 256:
-            # sub16
-            v = self._split_imm16(v)
-            return [0x3b, rid, v[0], v[1]]
+    def _ins_shl(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x45, 0x46, 0x46)
 
-        # sub8
-        return [0x3a, rid, v, 0x00]
+    def _ins_mul(self, line: Line, index: int) -> list:
+        return self._make_r816_instruction(line, index, 0x47, 0x48, 0x49)
 
     def _ins_pop(self, line: Line, index: int) -> list:
         rid = self._register_id(line.part(1))
-        if rid == 0xff:
+        if rid == self.INVALID_REG:
             self._die(index, f'unknown register `{line.part(1)}`')
         return [0x13, rid, 0x00, 0x00]
 
     def _ins_jmp(self, line: Line, index: int) -> list:
         self.link_points.append({
-            'symbol': line.part(1),
+            'symbol': self._parse_symbol(line.part(1)),
             'at': self.pos + 1,
             'index': index
         })
 
         return [0x30, 0x00, 0x00, 0x00]
+
+    def _ins_jnz(self, line: Line, index: int) -> list:
+        r0_src = line.part(1).strip(',')
+        r0 = self._register_id(r0_src)
+        if r0 == self.INVALID_REG:
+            self._die(index, f'unknown register `{r0_src}`')
+
+        self.link_points.append({
+            'symbol': self._parse_symbol(line.part(2)),
+            'at': self.pos + 2,
+            'index': index
+        })
+
+        return [0x31, r0, 0x00, 0x00]
+
+    def _ins_jeq(self, line: Line, index: int) -> list:
+        self.link_points.append({
+            'symbol': self._parse_symbol(line.part(1)),
+            'at': self.pos + 1,
+            'index': index
+        })
+
+        return [0x32, 0x00, 0x00, 0x00]
+
 
     def _ins_ret(self, line: Line, index: int) -> list:
         return [0x35, 0x00, 0x00, 0x00]
@@ -354,6 +503,7 @@ def main():
         description='Convert Irid assembly into a binary format.')
     parser.add_argument('input', help='input file')
     parser.add_argument('-o', '--output', required=False)
+    parser.add_argument('-s', '--sym', action='store_true', required=False)
 
     args = parser.parse_args()
     if not args.output:
@@ -362,6 +512,9 @@ def main():
     asm = Assembler(args.input)
     asm.assemble()
     asm.dump_program(args.output)
+
+    if args.sym:
+        asm.dump_symbols()
 
 
 main()
