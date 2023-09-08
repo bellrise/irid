@@ -8,12 +8,18 @@
 #include <stdio.h>
 #include <sys/signal.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
+
+static bool global_stop_cpu = false;
 
 cpu::cpu(memory& memory)
     : m_mem(memory)
     , m_interrupts(false)
     , m_in_interrupt(false)
+    , m_cycle_ns(0)
+    , m_target_ips(0)
+    , m_total_instructions(0)
     , m_devices()
 {
     initialize();
@@ -23,14 +29,18 @@ cpu::~cpu() { }
 
 void handle_ctrlc(int __attribute__((unused)) sig)
 {
-    printf("\n\r");
+    /* If the CPU did not stop and we find ourselfs here again, force exit. */
+    if (global_stop_cpu) {
+        puts("\nForced exit.");
+        exit(1);
+    }
 
     struct termios term;
     tcgetattr(STDIN_FILENO, &term);
     term.c_lflag |= ICANON | ECHO;
     tcsetattr(STDIN_FILENO, 0, &term);
 
-    exit(0);
+    global_stop_cpu = true;
 }
 
 void cpu::start()
@@ -42,6 +52,8 @@ void cpu::start()
     tcsetattr(STDIN_FILENO, 0, &term);
 
     signal(SIGINT, handle_ctrlc);
+
+    clock_gettime(CLOCK_MONOTONIC, &m_start_time);
 
     while (1) {
         try {
@@ -60,6 +72,45 @@ void cpu::start()
     }
 }
 
+void cpu::set_target_ips(int target_ips)
+{
+    if (target_ips <= 0)
+        return;
+
+    m_cycle_ns = 1000000000 / target_ips;
+    m_target_ips = target_ips;
+}
+
+void cpu::print_perf()
+{
+    struct timespec cur_time;
+    double avg_ips;
+    double avg_cycle;
+    char prefix = ' ';
+
+    clock_gettime(CLOCK_MONOTONIC, &cur_time);
+    avg_ips = cur_time.tv_sec - m_start_time.tv_sec;
+    if (avg_ips == 0)
+        avg_ips = 1;
+    avg_ips = m_total_instructions / avg_ips;
+
+    if (avg_ips > 1000) {
+        prefix = 'k';
+        avg_ips /= 1000;
+    }
+
+    avg_cycle = (double) (cur_time.tv_sec - m_start_time.tv_sec)
+              / m_total_instructions * 1000000;
+
+    puts("\nCPU performance results:\n");
+    printf("  total instructions    %zu\n", m_total_instructions);
+    printf("  average IPS           %.2lf %.1sHz\n", avg_ips,
+           prefix == ' ' ? "" : &prefix);
+    printf("  average cycle time    %.2lf us\n", avg_cycle);
+    printf("  target IPS            %d Hz\n", m_target_ips);
+    fputc('\n', stdout);
+}
+
 void cpu::add_device(const device& dev)
 {
     m_devices.push_back(dev);
@@ -67,9 +118,22 @@ void cpu::add_device(const device& dev)
 
 void cpu::mainloop()
 {
+    struct timespec instr_time_start;
+    struct timespec instr_time_end;
+    struct timespec sleep_time;
+    int nsec;
     u8 instr;
 
     while (1) {
+        /* Quick check if the user requested a shutdown. */
+
+        if (global_stop_cpu)
+            throw cpucall_request(cpucall_request::RQ_POWEROFF);
+
+        /* Start the instruction cycle. */
+
+        clock_gettime(CLOCK_MONOTONIC, &instr_time_start);
+
         /* Before we load & run another instruction, poll all devices for any
            incoming data. We also have to wait with polling the devices after
            we exit any currently-being-processed interrupts. */
@@ -120,6 +184,12 @@ void cpu::mainloop()
         case I_STORE:
             store(m_mem.read8(m_reg.ip + 1), m_mem.read8(m_reg.ip + 2));
             break;
+        case I_LOAD16:
+            load16(m_mem.read8(m_reg.ip + 1), m_mem.read16(m_reg.ip + 2));
+            break;
+        case I_STORE16:
+            store16(m_mem.read8(m_reg.ip + 1), m_mem.read16(m_reg.ip + 2));
+            break;
         case I_NULL:
             null(m_mem.read8(m_reg.ip + 1));
             break;
@@ -140,6 +210,15 @@ void cpu::mainloop()
             break;
         case I_CMG16:
             cmg16(m_mem.read8(m_reg.ip + 1), m_mem.read16(m_reg.ip + 2));
+            break;
+        case I_CML:
+            cml(m_mem.read8(m_reg.ip + 1), m_mem.read8(m_reg.ip + 2));
+            break;
+        case I_CML8:
+            cml8(m_mem.read8(m_reg.ip + 1), m_mem.read8(m_reg.ip + 2));
+            break;
+        case I_CML16:
+            cml16(m_mem.read8(m_reg.ip + 1), m_mem.read16(m_reg.ip + 2));
             break;
         case I_JMP:
             jmp(m_mem.read16(m_reg.ip + 1));
@@ -226,6 +305,25 @@ void cpu::mainloop()
         m_reg.ip += 4;
 dont_step:
         m_reg.ip += 0;
+
+        /* Before we run the next instruction, check if we are not speeding
+           and slow down to the target instructions-per-second appropriately. */
+
+        clock_gettime(CLOCK_MONOTONIC, &instr_time_end);
+
+        nsec = instr_time_end.tv_nsec - instr_time_start.tv_nsec;
+        if (instr_time_end.tv_sec != instr_time_start.tv_sec) {
+            nsec = instr_time_end.tv_nsec
+                 + (1000000000 - instr_time_start.tv_nsec);
+        }
+
+        if (nsec < m_cycle_ns) {
+            sleep_time.tv_sec = 0;
+            sleep_time.tv_nsec = m_cycle_ns - nsec;
+            nanosleep(&sleep_time, NULL);
+        }
+
+        m_total_instructions++;
     }
 }
 
@@ -263,9 +361,25 @@ void cpu::dump_registers()
            m_reg.sf);
 }
 
+u16 cpu::r_load(u8 id)
+{
+    if (is_half_register(id))
+        return static_cast<u16>(*regptr<u8>(id));
+    else
+        return *regptr<u16>(id);
+}
+
+void cpu::r_store(u8 id, u16 value)
+{
+    if (is_half_register(id))
+        *regptr<u8>(id) = static_cast<u8>(value);
+    else
+        *regptr<u16>(id) = value;
+}
+
 bool cpu::is_half_register(u8 id)
 {
-    return id > R_H0 && id < R_L3;
+    return id >= R_H0 && id <= R_L3;
 }
 
 void cpu::initialize()
@@ -427,36 +541,17 @@ void cpu::pop(u8 dest)
 
 void cpu::mov(u8 dest, u8 src)
 {
-    if (is_half_register(dest)) {
-        if (is_half_register(src)) {
-            // half <- half
-            *regptr<u8>(dest) = *regptr<u8>(src);
-        } else {
-            // half <- wide
-            *regptr<u8>(dest) = *regptr<u16>(src);
-        }
-    } else {
-        if (is_half_register(src)) {
-            // wide <- half
-            *regptr<u16>(dest) = *regptr<u8>(src);
-        } else {
-            // wide <- wide
-            *regptr<u16>(dest) = *regptr<u16>(src);
-        }
-    }
+    r_store(dest, r_load(src));
 }
 
 void cpu::mov8(u8 dest, u8 imm8)
 {
-    *regptr<u8>(dest) = imm8;
+    r_store(dest, imm8);
 }
 
 void cpu::mov16(u8 dest, u16 imm16)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) = imm16;
-    else
-        *regptr<u16>(dest) = imm16;
+    r_store(dest, imm16);
 }
 
 void cpu::load(u8 dest, u8 srcptr)
@@ -465,9 +560,9 @@ void cpu::load(u8 dest, u8 srcptr)
         throw cpu_fault(CPUFAULT_REG);
 
     if (is_half_register(dest))
-        *regptr<u8>(dest) = m_mem.read8(*regptr<u16>(srcptr));
+        r_store(dest, m_mem.read8(r_load(srcptr)));
     else
-        *regptr<u16>(dest) = m_mem.read16(*regptr<u16>(srcptr));
+        r_store(dest, m_mem.read16(r_load(srcptr)));
 }
 
 void cpu::store(u8 src, u8 destptr)
@@ -476,59 +571,75 @@ void cpu::store(u8 src, u8 destptr)
         throw cpu_fault(CPUFAULT_REG);
 
     if (is_half_register(src))
-        m_mem.write8(*regptr<u16>(destptr), *regptr<u8>(src));
+        m_mem.write8(r_load(destptr), r_load(src));
     else
-        m_mem.write16(*regptr<u16>(destptr), *regptr<u16>(src));
+        m_mem.write16(r_load(destptr), r_load(src));
+}
+
+void cpu::load16(u8 dest, u16 imm16ptr)
+{
+    if (is_half_register(dest))
+        r_store(dest, m_mem.read8(imm16ptr));
+    else
+        r_store(dest, m_mem.read16(imm16ptr));
+}
+
+void cpu::store16(u8 src, u16 imm16ptr)
+{
+    if (is_half_register(src))
+        m_mem.write8(imm16ptr, r_load(src));
+    else
+        m_mem.write16(imm16ptr, r_load(src));
 }
 
 void cpu::null(u8 dest)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) = 0;
-    else
-        *regptr<u16>(dest) = 0;
+    r_store(dest, 0);
 }
 
 void cpu::cmp(u8 left, u8 right)
 {
-    m_reg.cf = 0;
-    if (*regptr<u16>(left) == *regptr<u16>(right))
-        m_reg.cf = 1;
+    m_reg.cf = r_load(left) == r_load(right);
 }
 
 void cpu::cmp8(u8 left, u8 imm8)
 {
-    m_reg.cf = 0;
-    if (*regptr<u16>(left) == (u16) imm8)
-        m_reg.cf = 1;
+    m_reg.cf = r_load(left) == imm8;
 }
 
 void cpu::cmp16(u8 left, u16 imm16)
 {
-    m_reg.cf = 0;
-    if (*regptr<u16>(left) == imm16)
-        m_reg.cf = 1;
+    m_reg.cf = r_load(left) == imm16;
 }
 
 void cpu::cmg(u8 left, u8 right)
 {
-    m_reg.cf = 0;
-    if (*regptr<u16>(left) > *regptr<u16>(right))
-        m_reg.cf = 1;
+    m_reg.cf = r_load(left) > r_load(right);
 }
 
 void cpu::cmg8(u8 left, u8 imm8)
 {
-    m_reg.cf = 0;
-    if (*regptr<u16>(left) > imm8)
-        m_reg.cf = 1;
+    m_reg.cf = (u8) r_load(left) > imm8;
 }
 
 void cpu::cmg16(u8 left, u16 imm16)
 {
-    m_reg.cf = 0;
-    if (*regptr<u16>(left) > imm16)
-        m_reg.cf = 1;
+    m_reg.cf = r_load(left) > imm16;
+}
+
+void cpu::cml(u8 left, u8 right)
+{
+    m_reg.cf = r_load(left) < r_load(right);
+}
+
+void cpu::cml8(u8 left, u8 imm8)
+{
+    m_reg.cf = (u8) r_load(left) < imm8;
+}
+
+void cpu::cml16(u8 left, u16 imm16)
+{
+    m_reg.cf = r_load(left) < imm16;
 }
 
 void cpu::jmp(u16 addr)
@@ -538,7 +649,7 @@ void cpu::jmp(u16 addr)
 
 void cpu::jnz(u8 cond, u16 addr)
 {
-    if (*regptr<u16>(cond))
+    if (r_load(cond))
         m_reg.ip = addr;
     else
         m_reg.ip += 4;
@@ -618,30 +729,135 @@ void cpu::sub16(u8 dest, u16 imm16)
         *regptr<u16>(dest) -= imm16;
 }
 
-void cpu::and_(u8 dest, u8 src) { }
+void cpu::and_(u8 dest, u8 src)
+{
+    if (is_half_register(dest)) {
+        if (is_half_register(src))
+            *regptr<u8>(dest) &= *regptr<u8>(src);
+        else
+            *regptr<u8>(dest) &= *regptr<u16>(src);
+    } else {
+        if (is_half_register(src))
+            *regptr<u16>(dest) &= *regptr<u8>(src);
+        else
+            *regptr<u16>(dest) &= *regptr<u16>(src);
+    }
+}
 
-void cpu::and8(u8 dest, u8 imm8) { }
+void cpu::and8(u8 dest, u8 imm8)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) &= imm8;
+    else
+        *regptr<u16>(dest) &= imm8;
+}
 
-void cpu::and16(u8 dest, u16 imm16) { }
+void cpu::and16(u8 dest, u16 imm16)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) &= imm16;
+    else
+        *regptr<u16>(dest) &= imm16;
+}
 
-void cpu::or_(u8 dest, u8 src) { }
+void cpu::or_(u8 dest, u8 src)
+{
+    if (is_half_register(dest)) {
+        if (is_half_register(src))
+            *regptr<u8>(dest) |= *regptr<u8>(src);
+        else
+            *regptr<u8>(dest) |= *regptr<u16>(src);
+    } else {
+        if (is_half_register(src))
+            *regptr<u16>(dest) |= *regptr<u8>(src);
+        else
+            *regptr<u16>(dest) |= *regptr<u16>(src);
+    }
+}
 
-void cpu::or8(u8 dest, u8 imm8) { }
+void cpu::or8(u8 dest, u8 imm8)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) |= imm8;
+    else
+        *regptr<u16>(dest) |= imm8;
+}
 
-void cpu::or16(u8 dest, u16 imm16) { }
+void cpu::or16(u8 dest, u16 imm16)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) |= imm16;
+    else
+        *regptr<u16>(dest) |= imm16;
+}
 
-void cpu::not_(u8 dest) { }
+void cpu::not_(u8 dest)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) = ~(*regptr<u8>(dest));
+    else
+        *regptr<u16>(dest) = ~(*regptr<u16>(dest));
+}
 
-void cpu::shr(u8 dest, u8 src) { }
+void cpu::shr(u8 dest, u8 src)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) >>= *regptr<u8>(src);
+    else
+        *regptr<u16>(dest) >>= *regptr<u8>(src);
+}
 
-void cpu::shr8(u8 dest, u8 imm8) { }
+void cpu::shr8(u8 dest, u8 imm8)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) >>= imm8;
+    else
+        *regptr<u16>(dest) >>= imm8;
+}
 
-void cpu::shl(u8 dest, u8 src) { }
+void cpu::shl(u8 dest, u8 src)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) <<= *regptr<u8>(src);
+    else
+        *regptr<u16>(dest) <<= *regptr<u8>(src);
+}
 
-void cpu::shl8(u8 dest, u8 imm8) { }
+void cpu::shl8(u8 dest, u8 imm8)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) <<= imm8;
+    else
+        *regptr<u16>(dest) <<= imm8;
+}
 
-void cpu::mul(u8 dest, u8 src) { }
+void cpu::mul(u8 dest, u8 src)
+{
+    if (is_half_register(dest)) {
+        if (is_half_register(src))
+            *regptr<u8>(dest) *= *regptr<u8>(src);
+        else
+            *regptr<u8>(dest) *= *regptr<u16>(src);
+    } else {
+        if (is_half_register(src))
+            *regptr<u16>(dest) *= *regptr<u8>(src);
+        else
+            *regptr<u16>(dest) *= *regptr<u16>(src);
+    }
+}
 
-void cpu::mul8(u8 dest, u8 imm8) { }
+void cpu::mul8(u8 dest, u8 imm8)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) *= imm8;
+    else
+        *regptr<u16>(dest) *= imm8;
+}
 
-void cpu::mul16(u8 dest, u16 imm16) { }
+void cpu::mul16(u8 dest, u16 imm16)
+{
+    if (is_half_register(dest))
+        *regptr<u8>(dest) *= imm16;
+    else
+        *regptr<u16>(dest) *= imm16;
+}

@@ -10,6 +10,8 @@
 #include <stdexcept>
 #include <vector>
 
+#define IRID_EMUL_VERSION "0.5"
+
 #ifdef DEBUG
 /* info() is only called if DEBUG is defined. */
 # define info(...) _info_impl("irid-emul", __func__, __VA_ARGS__)
@@ -78,8 +80,32 @@ struct cpu
     ~cpu();
 
     void start();
+    void set_target_ips(int target_ips);
+    void print_perf();
 
     void add_device(const device& dev);
+
+  private:
+    memory& m_mem;
+    irid_reg m_reg;
+    irid_reg m_reg_cache;
+    bool m_interrupts;
+    bool m_in_interrupt;
+    int m_cycle_ns;
+    int m_target_ips;
+    size_t m_total_instructions;
+    std::vector<device> m_devices;
+    struct timespec m_start_time;
+
+    void initialize();
+    void mainloop();
+    void poll_devices();
+    void issue_interrupt(u16 addr);
+    void dump_registers();
+
+    /* Register manipulation */
+    u16 r_load(u8 id);
+    void r_store(u8 id, u16 value);
 
     /* CPU instructions. */
     void cpucall();
@@ -93,6 +119,8 @@ struct cpu
     void mov16(u8 dest, u16 imm16);
     void load(u8 dest, u8 srcptr);
     void store(u8 src, u8 destptr);
+    void load16(u8 dest, u16 imm16ptr);
+    void store16(u8 src, u16 imm16ptr);
     void null(u8 dest);
     void cmp(u8 left, u8 right);
     void cmp8(u8 left, u8 imm8);
@@ -100,6 +128,9 @@ struct cpu
     void cmg(u8 left, u8 right);
     void cmg8(u8 left, u8 imm8);
     void cmg16(u8 left, u16 imm16);
+    void cml(u8 left, u8 right);
+    void cml8(u8 left, u8 imm8);
+    void cml16(u8 left, u16 imm16);
     void jmp(u16 addr);
     void jnz(u8 cond, u16 addr);
     void jeq(u16 addr);
@@ -132,20 +163,6 @@ struct cpu
     void cpucall_deviceintr();
     void cpucall_devicewrite();
     void cpucall_deviceread();
-
-  private:
-    memory& m_mem;
-    irid_reg m_reg;
-    irid_reg m_reg_cache;
-    bool m_interrupts;
-    bool m_in_interrupt;
-    std::vector<device> m_devices;
-
-    void initialize();
-    void mainloop();
-    void poll_devices();
-    void issue_interrupt(u16 addr);
-    void dump_registers();
 
     template <typename T>
     T *regptr(u8 id)
