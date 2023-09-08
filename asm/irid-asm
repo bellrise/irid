@@ -106,6 +106,7 @@ class Assembler:
     labels: dict        # list of labels
     link_points: list   # list of locations to link
     last_label: str     # last major label
+    macros: dict        # list of macros
 
     INVALID_REG = -1
 
@@ -116,6 +117,7 @@ class Assembler:
         self.output = bytearray()
         self.pos = 0
         self.labels = {}
+        self.macros = {}
         self.link_points = []
 
     def assemble(self):
@@ -128,11 +130,15 @@ class Assembler:
 
             line = Line(raw_line)
 
+            for i, part in enumerate(line.parts):
+                if part in self.macros:
+                    line.parts[i] = self.macros[part]
+
             if line.startswith('\t') or line.startswith(' '):
                 self._add_instruction(line, index)
                 pass
             elif line.startswith('.'):
-                self._parse_directive(line, index)
+                self._parse_directive(line, index, raw_line)
             elif line.endswith(':'):
                 self._add_label(line, index)
             else:
@@ -207,31 +213,46 @@ class Assembler:
 
         return bytes(s, 'ascii')
 
-    def _parse_directive(self, line: Line, index: int):
+    def _parse_directive(self, line: Line, index: int, raw_line: str):
         dir = line.part(0)[1:]
 
         if dir == 'org':
             # Move to another origin point
             self.pos = parse_value(line.part(1))
+
         elif dir == 'string':
             # Place a string in memory
             data = line.part(1)
             s = self._parse_string(data) + b'\0'
             self._insert_bytes(self.pos, s, auto_offset=False)
             self.pos += len(s)
+
         elif dir == 'res':
             # Reserve n bytes
             b = b'\0' * parse_value(line.part(1))
             self._insert_bytes(self.pos, b, auto_offset=True)
+
         elif dir == 'byte':
             # Place a byte (u8)
             initial_value = parse_value(line.part(1))
             self._insert_bytes(self.pos, [initial_value], auto_offset=True)
+
         elif dir == 'word':
             # Place a word (u16)
             initial_value = parse_value(line.part(1))
             bytes_value = self._split_imm16(initial_value)
             self._insert_bytes(self.pos, bytes_value, auto_offset=True)
+
+        elif dir == 'macro':
+            parts = raw_line.split(maxsplit=2)
+            macro = parts[1]
+            if len(parts) > 2:
+                value = parts[2]
+            else:
+                value = ''
+
+            self.macros[macro] = value
+
         else:
             self._die(index, f'unknown directive `{dir}`')
 
