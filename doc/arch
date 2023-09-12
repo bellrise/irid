@@ -8,6 +8,8 @@ takes a value in a register and copies it into a location in memory, or the
 other way around. One byte is used for `mov`, one for the register ID (for a max
 of 255 registers), and two bytes for the address (each address takes 16 bits).
 
+The CPU starts by setting all registers to 0, and jumping to 0x0000 - starting
+execution there.
 
 Registers
 ---------
@@ -68,6 +70,9 @@ Instruction set
     - cmg [rx] [rz/imm8/imm16]
         See if the value in the register is greater than the register or
         immediate. If the comparison succeeds, the compare flag is set.
+    - cml [rx] [rz/imm8/imm16]
+        See if the value in the register is less than the register or
+        immediate. If the comparison succeeds, the compare flag is set.
 
 * Program control
     - jmp [addr]
@@ -84,6 +89,8 @@ Instruction set
     - cpucall
         Let the CPU execute a function specified by the r0 register. See the
         "CPU call" section.
+    - rti
+        Return from an interrupt.
 
 * Integer operations
     - add [rx] [rz/imm8/imm16]
@@ -102,6 +109,12 @@ Instruction set
         Shift a value in the register right, filling with zeroes.
     - shl [rx] [rz/imm8]
         Shift a value in the register left, filling with zeroes.
+
+* Interrupts
+    - sti
+        Set CPU interrupts.
+    - dsi
+        Disable CPU interrupts.
 
 
 Memory layout
@@ -195,6 +208,14 @@ All parameters are passed in the general registers, starting from r0.
     | r1: device ID
     | r2: pointer to device info struct
     Query the device info.
+
+0x15
+    | r1: device ID
+    | r2: pointer to the handler function
+    Install a handler which gets called when a byte can be read. Note that this
+    will call the function in interrupt mode, meaning the user has to return
+    using rti, not ret. CPU interrupts must be also enabled. The pointer to the
+    handler function cannot be 0x0000.
 
 0x20
     | r1: device ID
