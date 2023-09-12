@@ -27,7 +27,6 @@ struct settings
     int target_ips;
 };
 
-static void add_keyboard_device(cpu&);
 static void parse_args(struct settings& settings, int argc, char **argv);
 static void load_images(const std::vector<image_argument>& images,
                         memory& memory);
@@ -46,38 +45,15 @@ int main(int argc, char **argv)
     cpu.set_target_ips(settings.target_ips);
 
     load_images(settings.images, ram);
-    add_keyboard_device(cpu);
+    cpu.add_device(console_create(STDIN_FILENO, STDOUT_FILENO));
 
     /* Run the CPU. */
     cpu.start();
 
     if (settings.show_perf_results)
         cpu.print_perf();
-}
 
-void add_keyboard_device(cpu& cpu)
-{
-    device console = {0x1000, "console"};
-
-    console.read = []() {
-        return fgetc(stdin);
-    };
-
-    console.write = [](u8 byte) {
-        fputc(byte, stdout);
-        fflush(stdout);
-    };
-
-    console.poll = []() {
-        struct pollfd poll_rq;
-        poll_rq.fd = STDIN_FILENO;
-        poll_rq.events = POLLIN;
-
-        poll(&poll_rq, 1, 0);
-        return poll_rq.revents & POLLIN;
-    };
-
-    cpu.add_device(console);
+    cpu.remove_devices();
 }
 
 static void short_usage()

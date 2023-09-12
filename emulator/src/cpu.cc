@@ -116,6 +116,16 @@ void cpu::add_device(const device& dev)
     m_devices.push_back(dev);
 }
 
+void cpu::remove_devices()
+{
+    for (device& dev : m_devices) {
+        if (dev.close)
+            dev.close(dev);
+    }
+
+    m_devices.clear();
+}
+
 void cpu::mainloop()
 {
     struct timespec instr_time_start;
@@ -333,7 +343,7 @@ void cpu::poll_devices()
         if (!m_devices[i].handlerptr || !m_devices[i].poll)
             continue;
 
-        if (m_devices[i].poll())
+        if (m_devices[i].poll(m_devices[i]))
             issue_interrupt(m_devices[i].handlerptr);
     }
 }
@@ -411,6 +421,9 @@ void cpu::cpucall()
     case CPUCALL_DEVICEREAD:
         cpucall_deviceread();
         break;
+    case CPUCALL_DEVICEPOLL:
+        cpucall_devicepoll();
+        break;
     default:
         throw cpu_fault(CPUFAULT_CPUCALL);
     }
@@ -476,7 +489,7 @@ void cpu::cpucall_devicewrite()
         if (m_devices[i].id != m_reg.r1)
             continue;
 
-        m_devices[i].write(m_reg.h2);
+        m_devices[i].write(m_devices[i], m_reg.h2);
         break;
     }
 }
@@ -487,7 +500,18 @@ void cpu::cpucall_deviceread()
         if (m_devices[i].id != m_reg.r1)
             continue;
 
-        m_reg.h2 = m_devices[i].read();
+        m_reg.h2 = m_devices[i].read(m_devices[i]);
+        break;
+    }
+}
+
+void cpu::cpucall_devicepoll()
+{
+    for (size_t i = 0; i < m_devices.size(); i++) {
+        if (m_devices[i].id != m_reg.r1)
+            continue;
+
+        m_reg.h2 = m_devices[i].poll(m_devices[i]);
         break;
     }
 }
@@ -683,120 +707,67 @@ void cpu::ret()
 
 void cpu::add(u8 dest, u8 src)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) += *regptr<u8>(src);
-    else
-        *regptr<u16>(dest) += *regptr<u16>(dest);
+    r_store(dest, r_load(dest) + r_load(src));
 }
 
 void cpu::add8(u8 dest, u8 imm8)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) += imm8;
-    else
-        *regptr<u16>(dest) += imm8;
+    r_store(dest, r_load(dest) + imm8);
 }
 
 void cpu::add16(u8 dest, u16 imm16)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) += imm16;
-    else
-        *regptr<u16>(dest) += imm16;
+    r_store(dest, r_load(dest) + imm16);
 }
 
 void cpu::sub(u8 dest, u8 src)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) -= *regptr<u8>(src);
-    else
-        *regptr<u16>(dest) -= *regptr<u16>(dest);
+    r_store(dest, r_load(dest) - r_load(src));
 }
 
 void cpu::sub8(u8 dest, u8 imm8)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) -= imm8;
-    else
-        *regptr<u16>(dest) -= imm8;
+    r_store(dest, r_load(dest) - imm8);
 }
 
 void cpu::sub16(u8 dest, u16 imm16)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) -= imm16;
-    else
-        *regptr<u16>(dest) -= imm16;
+    r_store(dest, r_load(dest) - imm16);
 }
 
 void cpu::and_(u8 dest, u8 src)
 {
-    if (is_half_register(dest)) {
-        if (is_half_register(src))
-            *regptr<u8>(dest) &= *regptr<u8>(src);
-        else
-            *regptr<u8>(dest) &= *regptr<u16>(src);
-    } else {
-        if (is_half_register(src))
-            *regptr<u16>(dest) &= *regptr<u8>(src);
-        else
-            *regptr<u16>(dest) &= *regptr<u16>(src);
-    }
+    r_store(dest, r_load(dest) & r_load(src));
 }
 
 void cpu::and8(u8 dest, u8 imm8)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) &= imm8;
-    else
-        *regptr<u16>(dest) &= imm8;
+    r_store(dest, r_load(dest) & imm8);
 }
 
 void cpu::and16(u8 dest, u16 imm16)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) &= imm16;
-    else
-        *regptr<u16>(dest) &= imm16;
+    r_store(dest, r_load(dest) & imm16);
 }
 
 void cpu::or_(u8 dest, u8 src)
 {
-    if (is_half_register(dest)) {
-        if (is_half_register(src))
-            *regptr<u8>(dest) |= *regptr<u8>(src);
-        else
-            *regptr<u8>(dest) |= *regptr<u16>(src);
-    } else {
-        if (is_half_register(src))
-            *regptr<u16>(dest) |= *regptr<u8>(src);
-        else
-            *regptr<u16>(dest) |= *regptr<u16>(src);
-    }
+    r_store(dest, r_load(dest) | r_load(src));
 }
 
 void cpu::or8(u8 dest, u8 imm8)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) |= imm8;
-    else
-        *regptr<u16>(dest) |= imm8;
+    r_store(dest, r_load(dest) | imm8);
 }
 
 void cpu::or16(u8 dest, u16 imm16)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) |= imm16;
-    else
-        *regptr<u16>(dest) |= imm16;
+    r_store(dest, r_load(dest) | imm16);
 }
 
 void cpu::not_(u8 dest)
 {
-    if (is_half_register(dest))
-        *regptr<u8>(dest) = ~(*regptr<u8>(dest));
-    else
-        *regptr<u16>(dest) = ~(*regptr<u16>(dest));
+    r_store(dest, ~r_load(dest));
 }
 
 void cpu::shr(u8 dest, u8 src)

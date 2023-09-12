@@ -2,46 +2,97 @@
 
 .org 0x0000
 
+.macro CONSOLE 0x1000
+.macro CCTL_MODE 0x11
+.macro CCTL_SIZE 0x01
+
 restart:
     ; Set up stack at 0x8000
     mov sp, 0x8000
     mov bp, sp
 
-    ; Set up keyboard interrupt routine
-    mov r0, 0x15
-    mov r1, 0x1000
-    mov r2, keyboard_handler
-    cpucall
-
-    call query_devices
-
-    sti             ; enable and wait for interrupts
-
-@wait:
-    call echo_input
-    jmp @wait
-
-
-; echo_input
-; Echo the input buffer back to the user.
-echo_input:
-    ; Check if we can read something from the input buffer
-    load h0, V_wptr
-    load l0, V_rptr
-    cmp h0, l0      ; compare the write & read pointers
-    jeq @end        ; nothing to read
-
-    mov r3, B_input
-    add r3, l0          ; offset the pointer into the buffer
-
-    load h2, r3         ; read the byte
-    add l0, 1           ; increment the read pointer
-    store l0, V_rptr    ; save the read pointer
-
-    mov h0, h2
+    mov h0, 0x0c    ; clear screen
     call printchar
 
-@end:
+    call query_devices
+    call query_console_size
+
+@input:
+    mov r0, S_prefix
+    call print      ; print a prefix
+
+    mov r0, B_input
+    mov r1, 256
+    call getline    ; get a line from the user
+
+    mov r0, B_input
+    call strlen     ; check the len of the input line
+
+    ; lsdev
+    mov r1, 6       ; 6 bytes for "lsdev ", r0 already has the strlen
+    call min
+    mov r2, r0      ; max len is the shorter string
+    mov r0, B_input
+    mov r1, S_lsdev
+    call strncmp    ; check for "lsdev "
+    jnz r0, @call_lsdev
+
+    ; echo
+    mov r1, 5
+    call min
+    mov r2, r0
+    mov r0, B_input
+    mov r1, S_echo
+    call strncmp    ; check for "echo "
+    jnz r0, @call_echo
+
+    jmp @input
+
+@call_lsdev:
+    call query_devices
+    jmp @input
+
+@call_echo:
+    mov r0, B_input
+    add r0, 5       ; skip "echo "
+    call print
+    jmp @input
+
+@wait:
+    jmp @wait
+
+; query_console_size
+; Print the current console size.
+query_console_size:
+    push r4
+    push r5
+
+    mov h0, 0x11    ; control mode
+    call printchar
+
+    mov h0, 0x01    ; ask for size
+    call printchar
+
+    call getword    ; width
+    mov r4, r0
+    call getword    ; height
+    mov r5, r0
+
+    mov r0, S_console_size
+    call print
+
+    mov r0, r4      ; width
+    call printint
+    mov h0, 'x'
+    call printchar
+    mov r0, r5      ; height
+    call printint
+
+    mov h0, '\n'
+    call printchar
+
+    pop r5
+    pop r4
     ret
 
 ; query_devices
@@ -132,22 +183,96 @@ print:
     ret
 
 ; printchar
-; Print a single ASCII char.
+; Write a byte to the console device.
 ; h0 - the char to print
 printchar:
     mov h2, h0      ; set the char to write
     mov r0, 0x20    ; write
-    mov r1, 0x1000  ; terminal device
+    mov r1, CONSOLE ; console device
     cpucall         ; print char
+    ret
+
+; getchar
+; Get a single byte from the console device. Returns in h0. This function
+; will block until there is something to read.
+getchar:
+    mov r0, 0x22    ; poll the device
+    mov r1, CONSOLE
+    cpucall
+
+    cmp h2, 0       ; no data to read
+    jeq getchar     ; try again
+
+    mov r0, 0x21    ; read
+    mov r1, CONSOLE ; console device
+    cpucall
+    mov h0, h2      ; move the read byte into the return register
+    ret
+
+; getline
+; Get a full line from the console device. This function will block until
+; the device provides a full line. Will set the last byte of the buffer
+; to a NULL byte.
+; r0 - u8[] buffer
+; r1 - buffer len
+getline:
+    push r4
+    push r5
+
+    mov r4, r0      ; ptr
+    mov r5, r1      ; len
+
+@loop:
+    call getchar
+    store h0, r4    ; *ptr = byte
+
+    push h0
+    call printchar  ; echo it back
+
+    add r4, 1       ; ptr++
+    sub r5, 1       ; len--
+
+    cmp r5, 1       ; check if we run out of buffer space
+    jeq @endnull
+
+    pop h0
+    cmp h0, '\n'    ; see if this is the line end
+    jeq @endline    ; still end it with a NUL byte (replacing the \n)
+
+    jmp @loop
+
+@endline:
+    sub r4, 1
+
+@endnull:
+    mov h0, 0
+    store h0, r4    ; place the NUL byte
+
+    pop r5
+    pop r4
+    ret
+
+; getword
+; Get a whole word from the console device. Returns in r0.
+getword:
+    mov r0, 0x21    ; read
+    mov r1, CONSOLE ; console device
+
+    cpucall         ; high byte
+    mov h3, h2
+    cpucall         ; low byte
+    mov l3, h2
+
+    mov r0, r3
     ret
 
 ; printhex
 ; Print a word (u16 integer) in hexadecimal format.
 ; r0 - word to print
 printhex:
-    push sp
     push r4
     push r5
+    push r6
 
     mov r4, r0          ; store original word
     mov r5, 4           ; loop 4 times
@@ -171,9 +296,105 @@ printhex:
     sub r5, 1           ; decrement loop
     jnz r5, @loop
 
+    pop r6
     pop r5
     pop r4
-    pop sp
+    ret
+
+; mod
+; Make a modulo operation. The result is stored back in r0.
+; r0 - dividend
+; r1 - divisor
+mod:
+    cml r0, r1      ; check if r0 < r1
+    jeq @end
+
+    sub r0, r1
+    jmp mod
+
+@end:
+    ret
+
+; min
+; Returns the smaller number. The result is stored back in r0.
+; r0 - first word
+; r1 - second word
+min:
+    cmg r0, r1
+    jeq @swap
+    ret
+
+@swap:
+    mov r0, r1
+    ret
+
+; div
+; Make a division opetaion. The result is stored back in r0.
+; r0 - dividend
+; r1 - divisor
+div:
+    mov r2, 0       ; amount of times the divisor fit
+
+@loop:
+    cml r0, r1      ; check if r0 < r1
+    jeq @end
+
+    sub r0, r1
+    add r2, 1
+    jmp @loop
+
+@end:
+    mov r0, r2
+    ret
+
+; printint
+; Print a word (u16 integer) in decimal format.
+; r0 - word to print
+printint:
+    push r4
+    push r5
+
+    mov r5, r0
+
+    ; zero-out output buffer
+    mov r0, B_printint
+    mov h1, 0
+    mov r2, 6
+    call memset
+
+    ; move pointer to end of buffer
+    mov r4, B_printint
+    add r4, 5
+
+@loop:
+    ; value % 10
+    mov r0, r5
+    mov r1, 10
+    call mod
+
+    add h0, '0'     ; move char into '0'-'9'
+    store h0, r4    ; store char into buffer
+    sub r4, 1       ; ptr--
+
+    ; stop loop if value < 10
+    cml r5, 10
+    jeq @end
+
+    ; value /= 10
+    mov r0, r5
+    mov r1, 10
+    call div
+    mov r5, r0
+
+    jmp @loop
+
+@end:
+    mov r0, r4
+    add r0, 1
+    call print
+
+    pop r5
+    pop r4
     ret
 
 ; isalnum
@@ -204,6 +425,18 @@ isalnum:
 
 @false:
     mov r0, 0
+    ret
+
+; memset
+; Fill a range of memory with a single byte.
+; r0 - pointer to memory
+; h1 - byte to write
+; r2 - length of the range
+memset:
+    store h1, r0    ; write the byte
+    add r0, 1       ; ptr++
+    sub r2, 1       ; len--
+    jnz r2, memset
     ret
 
 ; strlen
@@ -252,40 +485,26 @@ strncmp:
     mov r0, 1       ; return true
     ret
 
-keyboard_handler:
-    ; Read a byte from the device
-    mov r0, 0x21
-    mov r1, 0x1000
-    cpucall
-
-    load h0, V_wptr ; load the write pointer
-    mov r3, B_input
-    add r3, h0      ; offset the pointer into the buffer
-    add h0, 1       ; increment the write pointer
-    store h0, V_wptr
-
-    store h2, r3    ; write the char into the buffer
-
-    rti             ; return from interrupt
-
-
-S_hello:
-.string "hello"
-
-S_hi:
-.string "hi"
-
 S_devices:
 .string "Devices:\n"
 
 S_deviceprefix:
 .string "  0x"
 
-V_wptr:
-.byte 0
+S_console_size:
+.string "Console size: "
 
-V_rptr:
-.byte 0
+S_prefix:
+.string "> "
+
+S_lsdev:
+.string "lsdev "
+
+S_echo:
+.string "echo "
 
 B_input:
 .res 256
+
+B_printint:
+.res 6

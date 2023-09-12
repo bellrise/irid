@@ -6,6 +6,7 @@
 #include "arch.h"
 
 #include <functional>
+#include <memory>
 #include <stddef.h>
 #include <stdexcept>
 #include <vector>
@@ -69,7 +70,7 @@ struct memory
     size_t m_totalsize;
     uint8_t *m_mem;
 
-    void checkaddr(u16 addr);
+    inline void checkaddr(u16 addr);
 };
 
 struct device;
@@ -84,6 +85,7 @@ struct cpu
     void print_perf();
 
     void add_device(const device& dev);
+    void remove_devices();
 
   private:
     memory& m_mem;
@@ -163,6 +165,7 @@ struct cpu
     void cpucall_deviceintr();
     void cpucall_devicewrite();
     void cpucall_deviceread();
+    void cpucall_devicepoll();
 
     template <typename T>
     T *regptr(u8 id)
@@ -190,11 +193,15 @@ struct device
     u16 handlerptr;
     const char *name;
 
+    /* For device state. */
+    void *state;
+
     device(u16 id, const char *name);
 
-    std::function<void(u8)> write;
-    std::function<u8(void)> read;
-    std::function<bool(void)> poll;
+    std::function<void(device&)> close;
+    std::function<void(device&, u8)> write;
+    std::function<u8(device&)> read;
+    std::function<bool(device&)> poll;
 };
 
 /* Dump `amount` bytes starting from `addr` to stdout. */
@@ -203,3 +210,13 @@ void dbytes(void *addr, size_t amount);
 int _die_impl(const char *prog, const char *fmt, ...);
 int _warn_impl(const char *prog, const char *fmt, ...);
 int _info_impl(const char *prog, const char *func, const char *fmt, ...);
+
+/* console */
+
+#define CONSOLE_CTRL 0x11
+
+/* The next two words in the read stream are the width & height of the console,
+   respectively. */
+#define CCTL_SIZE 0x01
+
+device console_create(int in, int out);

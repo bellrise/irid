@@ -4,7 +4,7 @@
 CXX ?= clang++
 
 CFLAGS    += -Wall -Wextra
-LDFLAGS   +=
+LDFLAGS   += -lxcb
 MAKEFLAGS += -j$(nproc)
 
 PREFIX := /usr/local

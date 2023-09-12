@@ -36,17 +36,14 @@ void memory::write8(u16 addr, u8 value)
 
 u16 memory::read16(u16 addr)
 {
-    u16 r;
-    ((u8 *) &r)[0] = read8(addr);
-    ((u8 *) &r)[1] = read8(addr + 1);
-    return r;
+    checkaddr(addr);
+    return *((u16 *) &m_mem[addr]);
 }
 
 void memory::write16(u16 addr, u16 value)
 {
-    u8 *b = reinterpret_cast<u8 *>(&value);
-    write8(addr, b[0]);
-    write8(addr + 1, b[1]);
+    checkaddr(addr);
+    *(u16 *) (&m_mem[addr]) = value;
 }
 
 void memory::read_range(u16 src, void *dest, u16 n)
@@ -64,7 +61,7 @@ void memory::dump(u16 addr, u16 n)
     dbytes(&m_mem[addr], n);
 }
 
-void memory::checkaddr(u16 addr)
+inline void memory::checkaddr(u16 addr)
 {
     if (addr >= m_totalsize)
         throw cpu_fault(CPUFAULT_SEG);
