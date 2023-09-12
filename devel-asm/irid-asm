@@ -42,11 +42,11 @@ class Line:
         for c in string:
             if c == '"' and in_string == '"':
                 in_string = None
-            if c == '"' and not in_string:
+            elif c == '"' and not in_string:
                 in_string = '"'
-            if c == "'" and in_string == "'":
+            elif c == "'" and in_string == "'":
                 in_string = None
-            if c == "'" and not in_string:
+            elif c == "'" and not in_string:
                 in_string = "'"
 
             if not in_string and c.isspace() and len(buf):
