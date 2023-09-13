@@ -1,10 +1,10 @@
 Irid
 ====
 
-Irid is a custom, 16-bit architecture built for fun and learning purposes. This
-project has a special emulator built-in, which will create a X11 window to draw
-the pixels set by any software that's running on the emulator, written using the
-Irid instruction set.
+This is the Irid mono-repo with all things Irid. Irid is a custom, 16-bit
+architecture built for fun and learning purposes. This project contains the
+emulator, assembler and linker for the custom assembly language, which frankly
+is simmilar to existing assemblies.
 
 
 Build
