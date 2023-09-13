@@ -7,11 +7,19 @@
 
 static void short_usage();
 static void usage();
+static void parse_warn_flag(options&, std::string option_name);
 
 void opt_set_defaults(options& opts)
 {
     opts.output = "out.bin";
     opts.input = "-";
+
+    opts.warn_origin_overlap = true;
+}
+
+void opt_set_warnings_for_as(assembler& as, options& opts)
+{
+    as.set_warning(warning_type::OVERLAPING_ORG, opts.warn_origin_overlap);
 }
 
 void opt_parse(options& opts, int argc, char **argv)
@@ -27,7 +35,7 @@ void opt_parse(options& opts, int argc, char **argv)
     opt_index = 0;
 
     while (1) {
-        c = getopt_long(argc, argv, "ho:v", long_opts, &opt_index);
+        c = getopt_long(argc, argv, "ho:vW:", long_opts, &opt_index);
         if (c == -1)
             break;
 
@@ -41,6 +49,9 @@ void opt_parse(options& opts, int argc, char **argv)
         case 'v':
             printf("irid-as %d.%d\n", AS_VER_MAJOR, AS_VER_MINOR);
             exit(0);
+        case 'W':
+            parse_warn_flag(opts, optarg);
+            break;
         }
     }
 
@@ -48,12 +59,12 @@ void opt_parse(options& opts, int argc, char **argv)
         opts.input = argv[optind];
 }
 
-static void short_usage()
+void short_usage()
 {
     puts("usage: irid-as [-h] [-o OUTPUT] [INPUT]");
 }
 
-static void usage()
+void usage()
 {
     short_usage();
     puts("\nAssemble Irid native assembly code into a binary format.");
@@ -61,5 +72,19 @@ static void usage()
     printf("Options:\n"
            "  -h, --help              show this usage page\n"
            "  -o, --output OUTPUT     output to a file (default out.bin)\n"
-           "  -v, --version           show the version and exit\n");
+           "  -v, --version           show the version and exit\n"
+           "  -Worigin-overlap        .org may cause code overlap\n");
+}
+
+void parse_warn_flag(options& opts, std::string option_name)
+{
+    bool enable_warning = true;
+
+    if (option_name.starts_with("no-")) {
+        enable_warning = false;
+        option_name = option_name.substr(3);
+    }
+
+    if (option_name == "origin-overlap")
+        opts.warn_origin_overlap = enable_warning;
 }

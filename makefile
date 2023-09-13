@@ -1,5 +1,7 @@
 all:
-	@ make -C emulator -s
+	@ make -j8 -C emul -s
+	@ make -j8 -C as -s
 
 clean:
-	@ make -C emulator -s clean
+	@ make -C emul -s clean
+	@ make -C as -s clean

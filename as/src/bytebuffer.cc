@@ -12,11 +12,39 @@ bytebuffer::bytebuffer()
     , m_space(0)
 { }
 
-bytebuffer::~bytebuffer() { }
+bytebuffer::bytebuffer(const bytebuffer& copy)
+{
+    ensure_size(copy.m_size);
+    std::memcpy(m_alloc, copy.m_alloc, copy.m_size);
+    m_size = copy.m_size;
+}
+
+bytebuffer::bytebuffer(bytebuffer&& moved)
+    : m_alloc(moved.m_alloc)
+    , m_size(moved.m_size)
+    , m_space(moved.m_space)
+{
+    moved.m_alloc = nullptr;
+    moved.m_size = 0;
+    moved.m_space = 0;
+}
+
+bytebuffer::~bytebuffer()
+{
+    clear();
+}
 
 size_t bytebuffer::len() const
 {
     return m_size;
+}
+
+void bytebuffer::clear()
+{
+    delete[] m_alloc;
+    m_alloc = nullptr;
+    m_space = 0;
+    m_size = 0;
 }
 
 void bytebuffer::append(std::byte byte)
@@ -41,9 +69,9 @@ void bytebuffer::insert(std::byte byte, size_t index)
 
 void bytebuffer::insert_range(range<std::byte>& bytes, size_t starting_index)
 {
-    ensure_size(starting_index + bytes.len + 1);
+    ensure_size(starting_index + bytes.len);
     std::memcpy(&m_alloc[starting_index], bytes.ptr, bytes.len);
-    m_size = std::max(m_size, starting_index + bytes.len + 1);
+    m_size = std::max(m_size, starting_index + bytes.len);
 }
 
 std::byte bytebuffer::at(size_t index) const
@@ -57,6 +85,9 @@ range<std::byte> bytebuffer::get_range(size_t starting_index, size_t len) const
 {
     size_t range_len;
 
+    if (m_size == 0)
+        return range<std::byte>(nullptr, 0);
+
     if (starting_index >= m_size)
         throw std::out_of_range("starting index in get_range() out of range");
 
@@ -69,8 +100,12 @@ range<std::byte> bytebuffer::get_range(size_t starting_index, size_t len) const
 
 std::byte *bytebuffer::checked_new(size_t allocation_size)
 {
+    std::byte *ptr;
+
     try {
-        return new std::byte[allocation_size];
+        ptr = new std::byte[allocation_size];
+        std::memset(ptr, 0, allocation_size);
+        return ptr;
     } catch (const std::bad_alloc&) {
         throw std::runtime_error("failed to allocate memory for bytebuffer");
     }

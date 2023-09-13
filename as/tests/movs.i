@@ -4,4 +4,3 @@ restart:
     mov h0, 2
     mov l0, 3
     mov sp, 0
-
