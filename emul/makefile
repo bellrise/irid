@@ -3,7 +3,7 @@
 
 CXX ?= clang++
 
-CFLAGS    += -Wall -Wextra
+CFLAGS    += -Wall -Wextra -I../include
 LDFLAGS   += -lxcb
 MAKEFLAGS += -j$(nproc)
 

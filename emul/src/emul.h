@@ -3,9 +3,8 @@
 
 #pragma once
 
-#include "arch.h"
-
 #include <functional>
+#include <irid/arch.h>
 #include <memory>
 #include <stddef.h>
 #include <stdexcept>

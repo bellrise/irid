@@ -3,13 +3,14 @@
 
 CXX ?= clang++
 
-CFLAGS    += -Wall -Wextra -std=c++2a
-LDFLAGS   += -lxcb
+CFLAGS    += -Wall -Wextra -std=c++2a -I../include
+LDFLAGS   +=
 MAKEFLAGS += -j$(nproc)
 
 PREFIX := /usr/local
 
 SRC := $(wildcard src/*.cc)
+DEP := $(wildcard src/*.h)
 OBJ := $(patsubst src/%.cc,build/%.o,$(SRC))
 BIN := irid-as
 OUT := build/$(BIN)
@@ -48,7 +49,7 @@ $(OUT): $(OBJ)
 	@echo "  LD $@"
 	@$(CXX) -o $@ $(CFLAGS) $(LDFLAGS) $^
 
-build/%.o: src/%.cc
+build/%.o: src/%.cc $(DEP)
 	@echo "  CXX $<"
 	@$(CXX) -c -o $@ $(CFLAGS) $<
 

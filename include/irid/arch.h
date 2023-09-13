@@ -1,5 +1,5 @@
 /* Irid architecture instruction set.
-   Copyright (C) 2021-2022 bellrise */
+   Copyright (C) 2021-2023 bellrise */
 
 #ifndef IRID_ARCH_H
 #define IRID_ARCH_H
@@ -17,8 +17,11 @@
  * instead of the iint type, because the signed bit needs to be ignored.
  */
 
+#ifndef IRID_DEFINED_UX
+# define IRID_DEFINED_UX 1
 typedef unsigned short u16;
 typedef unsigned char u8;
+#endif
 
 /*
  * Register IDs. In the instruction format, registers are represented using
