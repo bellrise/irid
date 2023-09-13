@@ -1,2 +1,3 @@
-emulator/build
+emul/build
+as/build
 *.bin
