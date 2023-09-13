@@ -1,0 +1,51 @@
+Device: console
+===============
+
+Device ID:   0x1000
+Device name: "console"
+
+The console device is always present for the user, and allows for communication
+to the outside world using a simple terminal. Writing a single byte to the
+device will immediately transfer it to the native device, unless the byte is
+17d / 11h. Then the console drops into control mode, where you can get meta
+data from the device. After sending 0x11 & the control code, the next n bytes
+the user reads will be the response.
+
+
+Control codes
+-------------
+
+CCTL_SIZE   0x1
+    Returns two words (u16[2]) which are the width & height of the terminal,
+    respectively.
+
+
+
+Examples
+--------
+
+Getting the terminal width & height could look something like this:
+
+    mov r0, 0x20        ; write
+    mov r1, 0x1000      ; console device ID
+
+    mov h2, 0x11        ; console control mode
+    cpucall
+    mov h2, 0x01        ; CCTL_SIZE
+    cpucall
+
+    mov r0, 0x21        ; read
+
+    cpucall             ; get the high byte
+    mov h3, h2
+    cpucall             ; get the low byte
+    mov l3, h2
+
+    mov r4, r3          ; the terminal width is now in r4.
+
+    cpucall             ; get the high byte
+    mov h3, h2
+    cpucall             ; get the low byte
+    mov l3, h2
+
+    mov r5, r3          ; the terminal height is now in r5.

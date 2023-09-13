@@ -109,7 +109,7 @@ static void console_write(device& self, u8 byte)
        to the console, while "firewalling" escape & control codes. */
 
     if (isprint(byte) || byte == ' ' || byte == '\n' || byte == '\r'
-        || byte == 0x7F) {
+        || byte == 0x7F || byte == '\t') {
         write(state(self)->out, &byte, 1);
         return;
     }
