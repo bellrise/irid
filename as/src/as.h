@@ -174,6 +174,7 @@ class assembler
     static std::string rstrip_string(const std::string&);
     static std::string strip_string(const std::string&);
     static std::string remove_comments(const std::string& line);
+    static int replace_char_and_count(std::string& str, char from, char to);
 };
 
 void die(const char *fmt, ...);

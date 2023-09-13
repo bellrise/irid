@@ -186,8 +186,10 @@ void assembler::parse_instruction(source_line& line)
         if (method.name != mnemonic)
             continue;
         method.method(*this, line);
-        break;
+        return;
     }
+
+    error(line, line.part_offsets[0], "unknown instruction");
 }
 
 void assembler::parse_directive(source_line& line)
@@ -274,13 +276,17 @@ void assembler::ins_no_arguments(source_line& line)
 void assembler::error(const source_line& line, int position_in_line,
                       const char *fmt, ...)
 {
+    std::string code_snippet;
     va_list args;
     va_start(args, fmt);
+
+    code_snippet = line.str;
+    replace_char_and_count(code_snippet, '\t', ' ');
 
     fprintf(stderr, "irid-as: \033[31merror\033[0m in %s\n",
             m_inputname.c_str());
     fprintf(stderr, "    |\n");
-    fprintf(stderr, "% 3d | %s\n", line.line_number, line.str.c_str());
+    fprintf(stderr, "% 3d | %s\n", line.line_number, code_snippet.c_str());
     fprintf(stderr, "    | ");
 
     for (int i = 0; i < position_in_line; i++)
@@ -297,6 +303,7 @@ void assembler::error(const source_line& line, int position_in_line,
 void assembler::warn(warning_type warning, const source_line& line,
                      int position_in_line, const char *fmt, ...)
 {
+    std::string code_snippet;
     va_list args;
     va_start(args, fmt);
 
@@ -306,10 +313,13 @@ void assembler::warn(warning_type warning, const source_line& line,
         return;
     }
 
+    code_snippet = line.str;
+    replace_char_and_count(code_snippet, '\t', ' ');
+
     fprintf(stderr, "irid-as: \033[33mwarning\033[0m in %s\n",
             m_inputname.c_str());
     fprintf(stderr, "    |\n");
-    fprintf(stderr, "% 3d | %s\n", line.line_number, line.str.c_str());
+    fprintf(stderr, "% 3d | %s\n", line.line_number, code_snippet.c_str());
     fprintf(stderr, "    | ");
 
     for (int i = 0; i < position_in_line; i++)
@@ -506,4 +516,18 @@ std::string assembler::remove_comments(const std::string& line)
     }
 
     return line;
+}
+
+int assembler::replace_char_and_count(std::string& str, char from, char to)
+{
+    int replaced = 0;
+
+    for (char& c : str) {
+        if (c == from) {
+            c = to;
+            replaced++;
+        }
+    }
+
+    return replaced;
 }
