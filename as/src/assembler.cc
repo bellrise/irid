@@ -81,6 +81,8 @@ void assembler::register_directive_methods()
     m_directives.push_back(
         named_method("string", &assembler::directive_string));
     m_directives.push_back(named_method("byte", &assembler::directive_byte));
+    // TODO: res
+    // TODO: macro
 }
 
 void assembler::register_instruction_methods()
@@ -91,6 +93,8 @@ void assembler::register_instruction_methods()
     m_instructions.push_back(named_method("rti", &assembler::ins_no_arguments));
     m_instructions.push_back(named_method("sti", &assembler::ins_no_arguments));
     m_instructions.push_back(named_method("dsi", &assembler::ins_no_arguments));
+
+    m_instructions.push_back(named_method("mov", &assembler::ins_dest_and_any));
 }
 
 bool assembler::warning_is_enabled(warning_type warning)
@@ -100,10 +104,10 @@ bool assembler::warning_is_enabled(warning_type warning)
     return m_warnings[static_cast<size_t>(warning)];
 }
 
-void assembler::insert_instruction(std::initializer_list<int> bytes)
+void assembler::insert_instruction(std::initializer_list<byte> bytes)
 {
-    std::byte instruction_bytes[4] = {static_cast<std::byte>(0)};
-    auto byterange = range<std::byte>(instruction_bytes, 4);
+    byte instruction_bytes[4] = {static_cast<byte>(0)};
+    auto byterange = range<byte>(instruction_bytes, 4);
     size_t align_offset;
     size_t index;
 
@@ -113,8 +117,8 @@ void assembler::insert_instruction(std::initializer_list<int> bytes)
        boundry, where the instruction will be placed. */
 
     index = 0;
-    for (int byte : bytes)
-        instruction_bytes[index++] = static_cast<std::byte>(byte);
+    for (byte byte : bytes)
+        instruction_bytes[index++] = byte;
 
     if (m_pos % 4 == 0) {
         m_code.insert_range(byterange, m_pos);
@@ -149,6 +153,8 @@ void assembler::parse_label(source_line& line)
     label_str = lstrip_string(line.str);
     error_offset = line.str.size() - label_str.size();
     label_str = label_str.substr(0, label_str.size() - 1);
+
+    // TODO: if the label starts with a '@', treat it as a local label
 
     /* Validate the label. */
 
@@ -223,7 +229,19 @@ void assembler::directive_org(source_line& line)
 
 void assembler::directive_string(source_line& line)
 {
-    // TODO
+    std::string value;
+
+    if (line.parts.size() < 2)
+        error(line, line.str.size(), "missing string value");
+    if (line.parts.size() > 2)
+        error(line, line.part_offsets[2], "too many arguments to directive");
+
+    value = parse_string(line.parts[1], line, line.part_offsets[1]);
+    auto range = range_from_string<byte>(value);
+
+    m_code.insert_range(range, m_pos);
+    m_pos += value.size();
+    m_code.insert(0, m_pos++);
 }
 
 void assembler::directive_byte(source_line& line)
@@ -241,7 +259,7 @@ void assembler::directive_byte(source_line& line)
               "value for a byte is too large, try .word instead");
     }
 
-    m_code.insert(static_cast<std::byte>(value), m_pos++);
+    m_code.insert(static_cast<byte>(value), m_pos++);
 }
 
 void assembler::ins_no_arguments(source_line& line)
@@ -251,26 +269,79 @@ void assembler::ins_no_arguments(source_line& line)
               line.parts[0].c_str());
     }
 
-    struct name_map_type
-    {
-        const std::string name;
-        const int instruction_byte;
-    };
+    insert_instruction({instruction_id_from_mnemonic(line.parts[0])});
+}
 
-    static constexpr name_map_type name_map[] = {
-        {"cpucall", I_CPUCALL}, {"ret", I_RET}, {"rti", I_RTI},
-        {"sti", I_STI},         {"dsi", I_DSI},
-    };
+void assembler::ins_dest_and_any(source_line& line)
+{
+    constexpr int IMM8_MODE = 1;
+    constexpr int IMM16_MODE = 2;
 
-    static constexpr size_t name_map_len =
-        sizeof(name_map) / sizeof(name_map_type);
+    byte dest_register_byte;
+    byte instruction_byte;
+    std::string dest;
+    std::string source;
+    int instruction_mode;
+    int immediate;
 
-    for (size_t i = 0; i < name_map_len; i++) {
-        if (line.parts[0] == name_map[i].name) {
-            insert_instruction({name_map[i].instruction_byte});
-            break;
-        }
+    if (line.parts.size() == 1)
+        error(line, line.parts[0].size(), "missing destination register");
+    if (line.parts.size() == 2) {
+        error(line, line.part_offsets[1] + line.parts[1].size(),
+              "missing source register or immediate");
     }
+
+    if (line.parts.size() > 3) {
+        error(line, line.part_offsets[3],
+              "unwanted argument for %s instruction", line.parts[0].c_str());
+    }
+
+    dest = line.parts[1];
+    source = line.parts[2];
+
+    instruction_byte = instruction_id_from_mnemonic(line.parts[0]);
+    if (instruction_byte == 0)
+        throw std::runtime_error("could not get instruction ID from mnemonic");
+
+    /* The destination, always a register. */
+
+    auto maybe_dest_register = try_parse_register(dest);
+    if (!maybe_dest_register.has_value()) {
+        error(line, line.part_offsets[1],
+              "expected a register as the destination argument");
+    }
+
+    dest_register_byte = maybe_dest_register.value();
+
+    /* The source, a register or immediate. */
+
+    auto maybe_source_register = try_parse_register(source);
+    if (maybe_source_register.has_value()) {
+        /* register, register */
+        return insert_instruction(
+            {instruction_byte, dest_register_byte,
+             static_cast<byte>(maybe_source_register.value())});
+    }
+
+    immediate = parse_int(source, line, line.part_offsets[2]);
+    instruction_mode = immediate < 256 ? IMM8_MODE : IMM16_MODE;
+    instruction_byte += instruction_mode;
+
+    if (instruction_mode == IMM16_MODE
+        && get_register_width(dest_register_byte) == register_width::BYTE) {
+        warn(warning_type::OVERLAPING_ORG, line, line.part_offsets[2],
+             "value does not fit in half-register, it will be truncated");
+    }
+
+    if (instruction_mode == IMM8_MODE) {
+        /* register, imm8 */
+        return insert_instruction(
+            {instruction_byte, dest_register_byte, byte(immediate % 256)});
+    }
+
+    /* register, imm16 */
+    return insert_instruction({instruction_byte, dest_register_byte,
+                               byte(immediate % 256), byte(immediate >> 8)});
 }
 
 void assembler::error(const source_line& line, int position_in_line,
@@ -332,6 +403,36 @@ void assembler::warn(warning_type warning, const source_line& line,
     va_end(args);
 }
 
+static int escape_char_to_byte(int c)
+{
+    switch (c) {
+    case 'a':
+        return '\a';
+    case 'b':
+        return '\b';
+    case 'e':
+        return '\e';
+    case 'f':
+        return '\f';
+    case 'n':
+        return '\n';
+    case 'r':
+        return '\r';
+    case 't':
+        return '\t';
+    case 'v':
+        return '\v';
+    case '\\':
+        return '\\';
+    case '"':
+        return '"';
+    case '\'':
+        return '\'';
+    default:
+        return 0;
+    }
+}
+
 int assembler::parse_int(const std::string& source, const source_line& src,
                          int pos_in_line)
 {
@@ -354,27 +455,7 @@ int assembler::parse_int(const std::string& source, const source_line& src,
                       "there can only be one byte in a character");
             }
 
-            switch (source[2]) {
-            case 'a':
-                return '\a';
-            case 'b':
-                return '\b';
-            case 'e':
-                return '\e';
-            case 'f':
-                return '\f';
-            case 'n':
-                return '\n';
-            case 'r':
-                return '\r';
-            case 't':
-                return '\t';
-            case 'v':
-                return '\v';
-            default:
-                return 0;
-            }
-
+            return escape_char_to_byte(source[2]);
         } else {
             /* Regular ASCII char. */
             if (source.size() != 3) {
@@ -398,50 +479,133 @@ int assembler::parse_int(const std::string& source, const source_line& src,
     return parsed_value;
 }
 
+std::string assembler::parse_string(std::string str, const source_line& src,
+                                    int pos_in_line)
+{
+    std::string result;
+
+    if (!str.starts_with('"'))
+        error(src, pos_in_line, "expected string");
+    if (!str.ends_with('"')) {
+        error(src, str.size() + pos_in_line,
+              "expected the string to end with a double-quote (\")");
+    }
+
+    str = str.substr(1, str.size() - 2);
+
+    for (size_t i = 0; i < str.size(); i++) {
+        if (str[i] == '\\') {
+            if (i == str.size() - 1) {
+                error(src, pos_in_line + i + 1,
+                      "expected another character after the backslash (\\)");
+            }
+
+            result.push_back(escape_char_to_byte(str[++i]));
+            continue;
+        }
+
+        result.push_back(str[i]);
+    }
+
+    return result;
+}
+
+std::optional<int> assembler::try_parse_register(const std::string& reg)
+{
+    if (reg.size() != 2)
+        return {};
+
+    /* r[0-7] */
+    if (reg[0] == 'r') {
+        if (reg[1] < '0' || reg[1] > '7')
+            return {};
+        return R_R0 + (reg[1] - '0');
+    }
+
+    /* h[0-3] or l[0-3] */
+    if (reg[0] == 'h' || reg[0] == 'l') {
+        if (reg[1] < '0' || reg[1] > '3')
+            return {};
+        return (reg[0] == 'h' ? R_H0 : R_L0) + (reg[1] - '0');
+    }
+
+    if (reg == "ip")
+        return R_IP;
+    if (reg == "sp")
+        return R_SP;
+    if (reg == "bp")
+        return R_BP;
+
+    return {};
+}
+
+byte assembler::instruction_id_from_mnemonic(const std::string& mnemonic)
+{
+    static constexpr std::pair<std::string, byte> mnemonic_map[] = {
+        {"cpucall", I_CPUCALL}, {"ret", I_RET}, {"rti", I_RTI},
+        {"sti", I_STI},         {"dsi", I_DSI}, {"mov", I_MOV}};
+    static const size_t map_size =
+        sizeof(mnemonic_map) / sizeof(std::pair<std::string, int>);
+
+    for (size_t i = 0; i < map_size; i++) {
+        if (mnemonic_map[i].first == mnemonic)
+            return mnemonic_map[i].second;
+    }
+
+    return 0;
+}
+
+assembler::register_width assembler::get_register_width(byte register_id)
+{
+    if (int(register_id) >= R_H0 && int(register_id) <= R_L3)
+        return register_width::BYTE;
+    return register_width::WORD;
+}
+
 std::vector<std::string>
 assembler::split_string_parts(const std::string& line,
                               std::vector<int>& part_offsets)
 {
     std::vector<std::string> parts;
     std::string buffered_part;
-    size_t start_index;
-    size_t end_index;
+    size_t start_of_part;
     char in_string;
 
     in_string = 0;
-    start_index = 0;
+    start_of_part = 0;
+
     for (size_t i = 0; i < line.size(); i++) {
         if (line[i] == '"' && !in_string)
             in_string = '"';
         else if (line[i] == '"' && in_string)
             in_string = 0;
-        if (line[i] == '\'' && !in_string)
+        else if (line[i] == '\'' && !in_string)
             in_string = '\'';
         else if (line[i] == '\'' && in_string)
             in_string = 0;
 
-        if (in_string || !isspace(line[i]))
+        if (!in_string && isspace(line[i]) && buffered_part.empty())
             continue;
 
-        end_index = i;
-        while (isspace(line[i]))
-            i++;
+        if (!in_string && isspace(line[i]) && buffered_part.size()) {
+            if (buffered_part.ends_with(',')) {
+                buffered_part =
+                    buffered_part.substr(0, buffered_part.size() - 1);
+            }
 
-        buffered_part = line.substr(start_index, end_index - start_index);
-        start_index = i;
-
-        if (!buffered_part.size())
+            parts.push_back(buffered_part);
+            part_offsets.push_back(start_of_part);
+            buffered_part.clear();
             continue;
+        }
 
-        if (buffered_part.ends_with(','))
-            buffered_part = buffered_part.substr(0, buffered_part.size() - 1);
-
-        part_offsets.push_back(start_index);
-        parts.push_back(buffered_part);
+        if (buffered_part.empty())
+            start_of_part = i;
+        buffered_part += line[i];
     }
 
-    part_offsets.push_back(start_index);
-    parts.push_back(line.substr(start_index));
+    parts.push_back(buffered_part);
+    part_offsets.push_back(start_of_part);
 
     return parts;
 }

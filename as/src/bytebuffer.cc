@@ -47,46 +47,46 @@ void bytebuffer::clear()
     m_size = 0;
 }
 
-void bytebuffer::append(std::byte byte)
+void bytebuffer::append(byte byte)
 {
     ensure_size(m_size + 1);
     m_alloc[m_size++] = byte;
 }
 
-void bytebuffer::append_range(range<std::byte>& bytes)
+void bytebuffer::append_range(range<byte>& bytes)
 {
     ensure_size(m_size + bytes.len);
     std::memcpy(&m_alloc[m_size], bytes.ptr, bytes.len);
     m_size += bytes.len;
 }
 
-void bytebuffer::insert(std::byte byte, size_t index)
+void bytebuffer::insert(byte byte, size_t index)
 {
     ensure_size(index + 1);
     m_alloc[index] = byte;
     m_size = std::max(m_size, index + 1);
 }
 
-void bytebuffer::insert_range(range<std::byte>& bytes, size_t starting_index)
+void bytebuffer::insert_range(range<byte>& bytes, size_t starting_index)
 {
     ensure_size(starting_index + bytes.len);
     std::memcpy(&m_alloc[starting_index], bytes.ptr, bytes.len);
     m_size = std::max(m_size, starting_index + bytes.len);
 }
 
-std::byte bytebuffer::at(size_t index) const
+byte bytebuffer::at(size_t index) const
 {
     if (index >= m_size)
         throw std::out_of_range("index in at() out of range");
     return m_alloc[index];
 }
 
-range<std::byte> bytebuffer::get_range(size_t starting_index, size_t len) const
+range<byte> bytebuffer::get_range(size_t starting_index, size_t len) const
 {
     size_t range_len;
 
     if (m_size == 0)
-        return range<std::byte>(nullptr, 0);
+        return range<byte>(nullptr, 0);
 
     if (starting_index >= m_size)
         throw std::out_of_range("starting index in get_range() out of range");
@@ -95,15 +95,15 @@ range<std::byte> bytebuffer::get_range(size_t starting_index, size_t len) const
     if (starting_index + range_len > m_size)
         range_len = m_size - starting_index;
 
-    return range<std::byte>(&m_alloc[starting_index], range_len);
+    return range<byte>(&m_alloc[starting_index], range_len);
 }
 
-std::byte *bytebuffer::checked_new(size_t allocation_size)
+byte *bytebuffer::checked_new(size_t allocation_size)
 {
-    std::byte *ptr;
+    byte *ptr;
 
     try {
-        ptr = new std::byte[allocation_size];
+        ptr = new byte[allocation_size];
         std::memset(ptr, 0, allocation_size);
         return ptr;
     } catch (const std::bad_alloc&) {
@@ -115,7 +115,7 @@ void bytebuffer::ensure_size(size_t required_size)
 {
     size_t allocation_alignment;
     size_t allocation_size;
-    std::byte *old_pointer;
+    byte *old_pointer;
 
     if (required_size <= m_space)
         return;

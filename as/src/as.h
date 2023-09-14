@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@ struct options
     std::string input;
     std::string output;
     bool warn_origin_overlap;
+    bool warn_comma_after_arg;
 };
 
 class assembler;
@@ -30,11 +32,19 @@ struct range
     const T *ptr;
     const size_t len;
 
-    range(T *ptr, size_t len)
+    range(const T *ptr, size_t len)
         : ptr(ptr)
         , len(len)
     { }
 };
+
+template <typename T>
+range<T> range_from_string(const std::string& str)
+{
+    return range<T>(reinterpret_cast<const T *>(str.c_str()), str.size());
+}
+
+typedef unsigned char byte;
 
 /**
  * Class for storing a range of raw bytes, without any specific memory layout.
@@ -50,20 +60,20 @@ class bytebuffer
     size_t len() const;
     void clear();
 
-    void append(std::byte);
-    void append_range(range<std::byte>&);
-    void insert(std::byte, size_t index);
-    void insert_range(range<std::byte>&, size_t starting_index);
+    void append(byte);
+    void append_range(range<byte>&);
+    void insert(byte, size_t index);
+    void insert_range(range<byte>&, size_t starting_index);
 
-    std::byte at(size_t index) const;
-    range<std::byte> get_range(size_t starting_index, size_t len) const;
+    byte at(size_t index) const;
+    range<byte> get_range(size_t starting_index, size_t len) const;
 
   private:
-    std::byte *m_alloc;
+    byte *m_alloc;
     size_t m_size;
     size_t m_space;
 
-    std::byte *checked_new(size_t allocation_size);
+    byte *checked_new(size_t allocation_size);
     void ensure_size(size_t required_size);
 };
 
@@ -126,6 +136,12 @@ class assembler
         std::function<void(assembler&, source_line&)> method;
     };
 
+    enum class register_width
+    {
+        BYTE,
+        WORD
+    };
+
     static constexpr size_t m_warnings_len =
         static_cast<size_t>(warning_type::_WARNING_TYPE_LEN);
 
@@ -148,7 +164,7 @@ class assembler
     void register_instruction_methods();
     bool warning_is_enabled(warning_type warning);
 
-    void insert_instruction(std::initializer_list<int> bytes);
+    void insert_instruction(std::initializer_list<byte> bytes);
 
     void parse_label(source_line&);
     void parse_instruction(source_line&);
@@ -158,7 +174,12 @@ class assembler
     void directive_string(source_line&);
     void directive_byte(source_line&);
 
+    /* Instruction with no arguments. */
     void ins_no_arguments(source_line&);
+
+    /* Instruction with a destination register and a source register or
+       immediate. */
+    void ins_dest_and_any(source_line&);
 
     void error(const source_line&, int position_in_line, const char *fmt, ...);
     void warn(warning_type warning, const source_line&, int position_in_line,
@@ -166,6 +187,12 @@ class assembler
 
     int parse_int(const std::string& any_int_representation,
                   const source_line& src, int pos_in_line);
+    std::string parse_string(std::string any_string_representation,
+                             const source_line& src, int pos_in_line);
+    std::optional<int>
+    try_parse_register(const std::string& register_representation);
+    byte instruction_id_from_mnemonic(const std::string& mnemonic);
+    register_width get_register_width(byte register_id);
 
     static std::vector<std::string>
     split_string_parts(const std::string&, std::vector<int>& part_offsets);
