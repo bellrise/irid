@@ -48,6 +48,9 @@ bool assembler::assemble()
         }
     }
 
+    for (const link_point& link_point : m_link_points)
+        link(link_point);
+
     return false;
 }
 
@@ -70,6 +73,7 @@ void assembler::set_warning(warning_type warning, bool true_or_false)
 
 void assembler::reset_state_variables()
 {
+    m_link_points.clear();
     m_labels.clear();
     m_code.clear();
     m_pos = 0;
@@ -81,8 +85,7 @@ void assembler::register_directive_methods()
     m_directives.push_back(
         named_method("string", &assembler::directive_string));
     m_directives.push_back(named_method("byte", &assembler::directive_byte));
-    // TODO: res
-    // TODO: macro
+    m_directives.push_back(named_method("resv", &assembler::directive_resv));
 }
 
 void assembler::register_instruction_methods()
@@ -95,6 +98,9 @@ void assembler::register_instruction_methods()
     m_instructions.push_back(named_method("dsi", &assembler::ins_no_arguments));
 
     m_instructions.push_back(named_method("mov", &assembler::ins_dest_and_any));
+
+    m_instructions.push_back(named_method("jmp", &assembler::ins_addr));
+    m_instructions.push_back(named_method("jeq", &assembler::ins_addr));
 }
 
 bool assembler::warning_is_enabled(warning_type warning)
@@ -140,28 +146,79 @@ void assembler::insert_instruction(std::initializer_list<byte> bytes)
     m_pos += 4;
 }
 
+void assembler::add_link_point(source_line& decl_line,
+                               const std::string& symbol, size_t code_offset)
+{
+    std::string resolved_symbol = symbol;
+
+    if (resolved_symbol[0] == '@') {
+        if (m_last_label.empty())
+            error(decl_line, 0, "local label needs a regular label before it");
+        resolved_symbol = m_last_label + resolved_symbol;
+    }
+
+    m_link_points.push_back(
+        link_point(resolved_symbol, code_offset, decl_line));
+}
+
+void assembler::link(const link_point& point)
+{
+    for (const label& lbl : m_labels) {
+        if (lbl.name == point.symbol) {
+            m_code.insert(byte(lbl.offset % 256), point.offset);
+            m_code.insert(byte(lbl.offset >> 8), point.offset + 1);
+            return;
+        }
+    }
+
+    error(point.decl_line, 0, "cannot find label `%s`", point.symbol.c_str());
+}
+
 static bool is_valid_symbol_char(char c)
 {
     return isalnum(c) || c == '_' || c == '.';
 }
 
+static bool is_valid_symbol(const std::string& str)
+{
+    if (str[0] != '@' && !is_valid_symbol_char(str[0]))
+        return false;
+
+    if (str.size() == 1)
+        return true;
+
+    for (char c : str.substr(1)) {
+        if (!is_valid_symbol_char(c))
+            return false;
+    }
+
+    return true;
+}
+
 void assembler::parse_label(source_line& line)
 {
+    bool append_nonlocal_label;
     std::string label_str;
     size_t error_offset;
 
     label_str = lstrip_string(line.str);
     error_offset = line.str.size() - label_str.size();
     label_str = label_str.substr(0, label_str.size() - 1);
-
-    // TODO: if the label starts with a '@', treat it as a local label
+    append_nonlocal_label = false;
 
     /* Validate the label. */
 
     if (!label_str.size())
         error(line, 0, "missing actual label");
 
-    if (!isalpha(label_str[0])) {
+    if (label_str[0] == '@') {
+        if (m_last_label.empty()) {
+            error(line, error_offset,
+                  "regular label has to exist before local label");
+        }
+
+        append_nonlocal_label = true;
+    } else if (!isalpha(label_str[0])) {
         error(line, error_offset,
               "invalid label, first char has to fulfill A-z");
     }
@@ -179,6 +236,11 @@ void assembler::parse_label(source_line& line)
         error(line, error_offset, "this label was already declared on line %d",
               lab.declaration_line);
     }
+
+    if (append_nonlocal_label)
+        label_str = m_last_label + label_str;
+    else
+        m_last_label = label_str;
 
     m_labels.push_back(label(label_str, m_pos, line.line_number));
 }
@@ -234,7 +296,7 @@ void assembler::directive_string(source_line& line)
     if (line.parts.size() < 2)
         error(line, line.str.size(), "missing string value");
     if (line.parts.size() > 2)
-        error(line, line.part_offsets[2], "too many arguments to directive");
+        error(line, line.part_offsets[2], "too many arguments");
 
     value = parse_string(line.parts[1], line, line.part_offsets[1]);
     auto range = range_from_string<byte>(value);
@@ -251,7 +313,7 @@ void assembler::directive_byte(source_line& line)
     if (line.parts.size() < 2)
         error(line, line.parts[0].size(), "expected a byte value here");
     if (line.parts.size() > 2)
-        error(line, line.part_offsets[2], "too many arguments to directive");
+        error(line, line.part_offsets[2], "too many arguments");
 
     value = parse_int(line.parts[1], line, line.part_offsets[1]);
     if (value > 255) {
@@ -260,6 +322,22 @@ void assembler::directive_byte(source_line& line)
     }
 
     m_code.insert(static_cast<byte>(value), m_pos++);
+}
+
+void assembler::directive_resv(source_line& line)
+{
+    int bytes_to_resv;
+
+    if (line.parts.size() < 2) {
+        error(line, line.parts[0].size(),
+              "expected an amount of bytes to reserve");
+    }
+
+    if (line.parts.size() > 2)
+        error(line, line.part_offsets[2], "too many arguments");
+
+    bytes_to_resv = parse_int(line.parts[1], line, line.part_offsets[1]);
+    m_code.insert_fill(0, m_pos, bytes_to_resv);
 }
 
 void assembler::ins_no_arguments(source_line& line)
@@ -342,6 +420,28 @@ void assembler::ins_dest_and_any(source_line& line)
     /* register, imm16 */
     return insert_instruction({instruction_byte, dest_register_byte,
                                byte(immediate % 256), byte(immediate >> 8)});
+}
+
+void assembler::ins_addr(source_line& line)
+{
+    std::string addr_str;
+    byte instruction_byte;
+    int addr;
+
+    if (line.parts.size() < 2)
+        error(line, line.str.size(), "missing address argument");
+
+    addr_str = line.parts[1];
+    instruction_byte = instruction_id_from_mnemonic(line.parts[0]);
+
+    if (is_valid_symbol(addr_str)) {
+        add_link_point(line, addr_str, m_pos + 1);
+        addr = 0;
+    } else {
+        addr = parse_int(addr_str, line, line.part_offsets[1]);
+    }
+
+    insert_instruction({instruction_byte, byte(addr % 256), byte(addr >> 8)});
 }
 
 void assembler::error(const source_line& line, int position_in_line,
@@ -469,7 +569,7 @@ int assembler::parse_int(const std::string& source, const source_line& src,
 
     parsed_value = strtol(source.c_str(), &end_ptr, 0);
     if (parsed_value == LONG_MAX || parsed_value > IRID_MAX_ADDR)
-        error(src, pos_in_line, "value is above the allowed range");
+        error(src, pos_in_line, "value is above the addressable range");
     if (parsed_value == LONG_MIN)
         error(src, pos_in_line, "value is below the allowed range");
 
@@ -542,8 +642,8 @@ std::optional<int> assembler::try_parse_register(const std::string& reg)
 byte assembler::instruction_id_from_mnemonic(const std::string& mnemonic)
 {
     static constexpr std::pair<std::string, byte> mnemonic_map[] = {
-        {"cpucall", I_CPUCALL}, {"ret", I_RET}, {"rti", I_RTI},
-        {"sti", I_STI},         {"dsi", I_DSI}, {"mov", I_MOV}};
+        {"cpucall", I_CPUCALL}, {"ret", I_RET}, {"rti", I_RTI}, {"sti", I_STI},
+        {"dsi", I_DSI},         {"mov", I_MOV}, {"jmp", I_JMP}, {"jeq", I_JEQ}};
     static const size_t map_size =
         sizeof(mnemonic_map) / sizeof(std::pair<std::string, int>);
 

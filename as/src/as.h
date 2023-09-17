@@ -64,6 +64,7 @@ class bytebuffer
     void append_range(range<byte>&);
     void insert(byte, size_t index);
     void insert_range(range<byte>&, size_t starting_index);
+    void insert_fill(byte with_byte, size_t starting_index, size_t len);
 
     byte at(size_t index) const;
     range<byte> get_range(size_t starting_index, size_t len) const;
@@ -136,6 +137,13 @@ class assembler
         std::function<void(assembler&, source_line&)> method;
     };
 
+    struct link_point
+    {
+        std::string symbol;
+        size_t offset;
+        source_line decl_line;
+    };
+
     enum class register_width
     {
         BYTE,
@@ -155,7 +163,9 @@ class assembler
     std::array<bool, m_warnings_len> m_warnings;
 
     /* State variables. */
+    std::vector<link_point> m_link_points;
     std::vector<label> m_labels;
+    std::string m_last_label;
     bytebuffer m_code;
     size_t m_pos;
 
@@ -165,6 +175,10 @@ class assembler
     bool warning_is_enabled(warning_type warning);
 
     void insert_instruction(std::initializer_list<byte> bytes);
+    void add_link_point(source_line&, const std::string& symbol,
+                        size_t code_offset);
+
+    void link(const link_point&);
 
     void parse_label(source_line&);
     void parse_instruction(source_line&);
@@ -173,6 +187,8 @@ class assembler
     void directive_org(source_line&);
     void directive_string(source_line&);
     void directive_byte(source_line&);
+    void directive_resv(source_line&);
+    void directive_macro(source_line&);
 
     /* Instruction with no arguments. */
     void ins_no_arguments(source_line&);
@@ -180,6 +196,9 @@ class assembler
     /* Instruction with a destination register and a source register or
        immediate. */
     void ins_dest_and_any(source_line&);
+
+    /* Instruction with a single address. */
+    void ins_addr(source_line&);
 
     void error(const source_line&, int position_in_line, const char *fmt, ...);
     void warn(warning_type warning, const source_line&, int position_in_line,

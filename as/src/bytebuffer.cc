@@ -74,6 +74,13 @@ void bytebuffer::insert_range(range<byte>& bytes, size_t starting_index)
     m_size = std::max(m_size, starting_index + bytes.len);
 }
 
+void bytebuffer::insert_fill(byte with_byte, size_t starting_index, size_t len)
+{
+    ensure_size(starting_index + len);
+    std::memset(&m_alloc[starting_index], with_byte, len);
+    m_size = std::max(m_size, starting_index + len);
+}
+
 byte bytebuffer::at(size_t index) const
 {
     if (index >= m_size)
