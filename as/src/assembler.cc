@@ -86,10 +86,12 @@ void assembler::register_directive_methods()
         named_method("string", &assembler::directive_string));
     m_directives.push_back(named_method("byte", &assembler::directive_byte));
     m_directives.push_back(named_method("resv", &assembler::directive_resv));
+    m_directives.push_back(named_method("value", &assembler::directive_value));
 }
 
 void assembler::register_instruction_methods()
 {
+    /* <no args> */
     m_instructions.push_back(
         named_method("cpucall", &assembler::ins_no_arguments));
     m_instructions.push_back(named_method("ret", &assembler::ins_no_arguments));
@@ -97,10 +99,36 @@ void assembler::register_instruction_methods()
     m_instructions.push_back(named_method("sti", &assembler::ins_no_arguments));
     m_instructions.push_back(named_method("dsi", &assembler::ins_no_arguments));
 
+    /* rx, any */
     m_instructions.push_back(named_method("mov", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("add", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("sub", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("cmp", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("cmg", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("cml", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("and", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("or", &assembler::ins_dest_and_any));
 
+    /* rx */
+    m_instructions.push_back(named_method("push", &assembler::ins_register));
+    m_instructions.push_back(named_method("pop", &assembler::ins_register));
+
+    /* rx, imm8 */
+    m_instructions.push_back(named_method("shr", &assembler::ins_dest_and_r8));
+    m_instructions.push_back(named_method("shl", &assembler::ins_dest_and_r8));
+
+    /* rx, addr */
+    m_instructions.push_back(
+        named_method("jnz", &assembler::ins_dest_and_addr));
+
+    /* rx, [addr/rx] */
+    m_instructions.push_back(named_method("load", &assembler::ins_load));
+    m_instructions.push_back(named_method("store", &assembler::ins_store));
+
+    /* addr */
     m_instructions.push_back(named_method("jmp", &assembler::ins_addr));
     m_instructions.push_back(named_method("jeq", &assembler::ins_addr));
+    m_instructions.push_back(named_method("call", &assembler::ins_addr));
 }
 
 bool assembler::warning_is_enabled(warning_type warning)
@@ -147,7 +175,8 @@ void assembler::insert_instruction(std::initializer_list<byte> bytes)
 }
 
 void assembler::add_link_point(source_line& decl_line,
-                               const std::string& symbol, size_t code_offset)
+                               const std::string& symbol, size_t code_offset,
+                               int line_offset)
 {
     std::string resolved_symbol = symbol;
 
@@ -158,7 +187,20 @@ void assembler::add_link_point(source_line& decl_line,
     }
 
     m_link_points.push_back(
-        link_point(resolved_symbol, code_offset, decl_line));
+        link_point(resolved_symbol, code_offset, decl_line, line_offset));
+}
+
+int assembler::resolve_address_or_link(source_line& line,
+                                       const std::string& symbol,
+                                       size_t code_offset, int line_offset)
+{
+    for (const auto& val : m_values) {
+        if (val.name == symbol)
+            return val.value;
+    }
+
+    add_link_point(line, symbol, code_offset, line_offset);
+    return 0;
 }
 
 void assembler::link(const link_point& point)
@@ -171,7 +213,8 @@ void assembler::link(const link_point& point)
         }
     }
 
-    error(point.decl_line, 0, "cannot find label `%s`", point.symbol.c_str());
+    error(point.decl_line, point.line_offset, "cannot find label `%s`",
+          point.symbol.c_str());
 }
 
 static bool is_valid_symbol_char(char c)
@@ -179,12 +222,17 @@ static bool is_valid_symbol_char(char c)
     return isalnum(c) || c == '_' || c == '.';
 }
 
+static bool is_valid_start_symbol_char(char c)
+{
+    return isalpha(c) || c == '_' || c == '.';
+}
+
 static bool is_valid_symbol(const std::string& str)
 {
-    if (str[0] != '@' && !is_valid_symbol_char(str[0]))
+    if (str[0] != '@' && !is_valid_start_symbol_char(str[0]))
         return false;
 
-    if (str.size() == 1)
+    if (str.size() == 1 && is_valid_start_symbol_char(str[0]))
         return true;
 
     for (char c : str.substr(1)) {
@@ -269,8 +317,10 @@ void assembler::parse_directive(source_line& line)
         if (dir.name != directive)
             continue;
         dir.method(*this, line);
-        break;
+        return;
     }
+
+    error(line, 0, "unknown directive");
 }
 
 void assembler::directive_org(source_line& line)
@@ -338,6 +388,96 @@ void assembler::directive_resv(source_line& line)
 
     bytes_to_resv = parse_int(line.parts[1], line, line.part_offsets[1]);
     m_code.insert_fill(0, m_pos, bytes_to_resv);
+    m_pos += bytes_to_resv;
+}
+
+void assembler::directive_value(source_line& line)
+{
+    std::string name;
+    int value;
+
+    if (line.parts.size() < 3)
+        error(line, line.str.size(), "expected a value");
+    if (line.parts.size() > 3)
+        error(line, line.part_offsets[2], "too many arguments");
+
+    name = line.parts[1];
+    if (!is_valid_symbol(name))
+        error(line, line.part_offsets[1], "this is not a valid symbol");
+
+    value = parse_int(line.parts[2], line, line.part_offsets[2]);
+    m_values.push_back({name, value});
+}
+
+std::vector<assembler::arg_variant>
+assembler::parse_args(source_line& line,
+                      std::initializer_list<arg_type> argument_types,
+                      std::initializer_list<std::string> error_messages)
+{
+    std::vector<arg_variant> args;
+    std::string missing_arg_str;
+    arg_type argument_type;
+    int int_value;
+
+    if (argument_types.size() != error_messages.size()) {
+        throw std::logic_error(
+            "argument_types.size() != error_messages.size()");
+    }
+
+    if (line.parts.size() > argument_types.size()) {
+        error(line, line.part_offsets[argument_types.size() - 1],
+              "too many arguments");
+    }
+
+    for (size_t i = 0; i < argument_types.size(); i++) {
+        argument_type = argument_types.begin()[i];
+
+        if (line.parts.size() < i) {
+            /* Missing argument. */
+            missing_arg_str = "expected " + error_messages.begin()[i];
+            error(line, line.str.size(), missing_arg_str.c_str());
+        }
+
+        if (argument_type == arg_type::REGISTER) {
+            auto maybe_register = try_parse_register(line.parts[i + 1]);
+            if (!maybe_register.has_value())
+                error(line, line.part_offsets[i + 1], "expected register");
+
+            args.push_back(byte(maybe_register.value()));
+            continue;
+        }
+
+        /* Linkable symbol. */
+        if (is_valid_symbol(line.parts[i + 1])) {
+            if (argument_type == arg_type::IMM8) {
+                error(line, line.part_offsets[i + 1],
+                      "an 8-bit immediate is allowed here, an address is too "
+                      "wide");
+            }
+
+            args.push_back(resolve_address_or_link(
+                line, line.parts[i + 1], m_pos + 2, line.part_offsets[i + 1]));
+            continue;
+        }
+
+        int_value =
+            parse_int(line.parts[i + 1], line, line.part_offsets[i + 1]);
+
+        if (argument_type == arg_type::IMM8) {
+            if (int_value > 255) {
+                error(line, line.part_offsets[i + 1],
+                      "%d will not fit in an 8-bit value", int_value);
+            }
+
+            args.push_back(byte(int_value));
+        } else {
+            args.push_back(int_value);
+        }
+    }
+
+    if (argument_types.size() != args.size())
+        throw std::runtime_error("failed to ensure args");
+    return args;
 }
 
 void assembler::ins_no_arguments(source_line& line)
@@ -361,6 +501,7 @@ void assembler::ins_dest_and_any(source_line& line)
     std::string source;
     int instruction_mode;
     int immediate;
+    int addr;
 
     if (line.parts.size() == 1)
         error(line, line.parts[0].size(), "missing destination register");
@@ -401,6 +542,14 @@ void assembler::ins_dest_and_any(source_line& line)
              static_cast<byte>(maybe_source_register.value())});
     }
 
+    if (is_valid_symbol(source)) {
+        addr = resolve_address_or_link(line, source, m_pos + 2,
+                                       line.part_offsets[2]);
+        return insert_instruction({byte(instruction_byte + IMM16_MODE),
+                                   dest_register_byte, byte(addr % 256),
+                                   byte(addr >> 8)});
+    }
+
     immediate = parse_int(source, line, line.part_offsets[2]);
     instruction_mode = immediate < 256 ? IMM8_MODE : IMM16_MODE;
     instruction_byte += instruction_mode;
@@ -422,6 +571,82 @@ void assembler::ins_dest_and_any(source_line& line)
                                byte(immediate % 256), byte(immediate >> 8)});
 }
 
+void assembler::ins_dest_and_r8(source_line& line)
+{
+    byte instruction_byte;
+    int value;
+
+    if (line.parts.size() == 1)
+        error(line, line.parts[0].size(), "missing destination register");
+    if (line.parts.size() == 2) {
+        error(line, line.part_offsets[1] + line.parts[1].size(),
+              "missing source register or immediate");
+    }
+
+    instruction_byte = instruction_id_from_mnemonic(line.parts[0]);
+    if (instruction_byte == 0)
+        throw std::runtime_error("could not get instruction ID from mnemonic");
+
+    auto maybe_register = try_parse_register(line.parts[1]);
+    if (!maybe_register.has_value()) {
+        error(line, line.part_offsets[1],
+              "expected a register as the destination argument");
+    }
+
+    auto maybe_source_register = try_parse_register(line.parts[2]);
+    if (maybe_source_register.has_value()) {
+        return insert_instruction({instruction_byte,
+                                   byte(maybe_register.value()),
+                                   byte(maybe_source_register.value())});
+    }
+
+    value = parse_int(line.parts[2], line, line.part_offsets[2]);
+    if (value > 255)
+        error(line, line.part_offsets[2], "value cannot fit in a 8-bit byte");
+
+    return insert_instruction({byte(instruction_byte + 1),
+                               byte(maybe_register.value()),
+                               byte(value % 256)});
+}
+
+void assembler::ins_dest_and_addr(source_line& line)
+{
+    byte instruction_byte;
+    std::string dest_str;
+    std::string addr_str;
+    int addr;
+
+    if (line.parts.size() == 1)
+        error(line, line.parts[0].size(), "missing destination register");
+    if (line.parts.size() == 2) {
+        error(line, line.part_offsets[1] + line.parts[1].size(),
+              "missing address");
+    }
+
+    if (line.parts.size() > 3) {
+        error(line, line.part_offsets[3],
+              "unwanted argument for %s instruction", line.parts[0].c_str());
+    }
+
+    dest_str = line.parts[1];
+    addr_str = line.parts[2];
+    instruction_byte = instruction_id_from_mnemonic(line.parts[0]);
+
+    auto maybe_register = try_parse_register(dest_str);
+    if (!maybe_register.has_value())
+        error(line, line.part_offsets[1], "expected a register");
+
+    if (is_valid_symbol(addr_str)) {
+        addr = resolve_address_or_link(line, addr_str, m_pos + 2,
+                                       line.part_offsets[2]);
+    } else {
+        addr = parse_int(addr_str, line, line.part_offsets[1]);
+    }
+
+    return insert_instruction({instruction_byte, byte(maybe_register.value()),
+                               byte(addr % 256), byte(addr >> 8)});
+}
+
 void assembler::ins_addr(source_line& line)
 {
     std::string addr_str;
@@ -435,13 +660,75 @@ void assembler::ins_addr(source_line& line)
     instruction_byte = instruction_id_from_mnemonic(line.parts[0]);
 
     if (is_valid_symbol(addr_str)) {
-        add_link_point(line, addr_str, m_pos + 1);
-        addr = 0;
+        addr = resolve_address_or_link(line, addr_str, m_pos + 1,
+                                       line.part_offsets[1]);
     } else {
         addr = parse_int(addr_str, line, line.part_offsets[1]);
     }
 
     insert_instruction({instruction_byte, byte(addr % 256), byte(addr >> 8)});
+}
+
+void assembler::ins_register(source_line& line)
+{
+    byte instruction_byte;
+
+    if (line.parts.size() < 2)
+        error(line, line.str.size(), "missing register argument");
+
+    auto maybe_register = try_parse_register(line.parts[1]);
+    if (!maybe_register.has_value())
+        error(line, line.part_offsets[1], "expected a register");
+
+    instruction_byte = instruction_id_from_mnemonic(line.parts[0]);
+
+    insert_instruction({instruction_byte, byte(maybe_register.value())});
+}
+
+void assembler::ins_load(source_line& line)
+{
+    ins_load_and_store(line, I_LOAD, I_LOAD16);
+}
+
+void assembler::ins_store(source_line& line)
+{
+    ins_load_and_store(line, I_STORE, I_STORE16);
+}
+
+void assembler::ins_load_and_store(source_line& line, byte r_instruction,
+                                   byte imm16_instruction)
+{
+    std::string addr_str;
+    byte operand;
+    int addr;
+
+    if (line.parts.size() < 2)
+        error(line, line.str.size(), "missing operand argument");
+    if (line.parts.size() < 3)
+        error(line, line.str.size(), "missing address argument");
+
+    auto maybe_register = try_parse_register(line.parts[1]);
+    if (!maybe_register.has_value())
+        error(line, line.part_offsets[1], "expected a register");
+
+    operand = maybe_register.value();
+    addr_str = line.parts[2];
+
+    auto maybe_addr = try_parse_register(line.parts[2]);
+    if (maybe_addr.has_value()) {
+        return insert_instruction(
+            {r_instruction, operand, byte(maybe_addr.value())});
+    }
+
+    if (is_valid_symbol(addr_str)) {
+        addr = resolve_address_or_link(line, addr_str, m_pos + 1,
+                                       line.part_offsets[2]);
+    } else {
+        addr = parse_int(addr_str, line, line.part_offsets[1]);
+    }
+
+    return insert_instruction(
+        {imm16_instruction, operand, byte(addr % 256), byte(addr >> 8)});
 }
 
 void assembler::error(const source_line& line, int position_in_line,
@@ -456,9 +743,9 @@ void assembler::error(const source_line& line, int position_in_line,
 
     fprintf(stderr, "irid-as: \033[31merror\033[0m in %s\n",
             m_inputname.c_str());
-    fprintf(stderr, "    |\n");
-    fprintf(stderr, "% 3d | %s\n", line.line_number, code_snippet.c_str());
-    fprintf(stderr, "    | ");
+    fprintf(stderr, "     |\n");
+    fprintf(stderr, "% 4d | %s\n", line.line_number, code_snippet.c_str());
+    fprintf(stderr, "     | ");
 
     for (int i = 0; i < position_in_line; i++)
         fputc(' ', stderr);
@@ -642,8 +929,14 @@ std::optional<int> assembler::try_parse_register(const std::string& reg)
 byte assembler::instruction_id_from_mnemonic(const std::string& mnemonic)
 {
     static constexpr std::pair<std::string, byte> mnemonic_map[] = {
-        {"cpucall", I_CPUCALL}, {"ret", I_RET}, {"rti", I_RTI}, {"sti", I_STI},
-        {"dsi", I_DSI},         {"mov", I_MOV}, {"jmp", I_JMP}, {"jeq", I_JEQ}};
+        {"cpucall", I_CPUCALL}, {"call", I_CALL}, {"ret", I_RET},
+        {"rti", I_RTI},         {"sti", I_STI},   {"dsi", I_DSI},
+        {"mov", I_MOV},         {"jmp", I_JMP},   {"jeq", I_JEQ},
+        {"add", I_ADD},         {"sub", I_SUB},   {"jnz", I_JNZ},
+        {"push", I_PUSH},       {"pop", I_POP},   {"load", I_LOAD},
+        {"store", I_STORE},     {"cmg", I_CMG},   {"cml", I_CML},
+        {"cmp", I_CMP},         {"and", I_AND},   {"or", I_OR},
+        {"shr", I_SHR},         {"shl", I_SHL}};
     static const size_t map_size =
         sizeof(mnemonic_map) / sizeof(std::pair<std::string, int>);
 

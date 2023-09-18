@@ -2,9 +2,9 @@
 
 .org 0x0000
 
-.macro CONSOLE 0x1000
-.macro CCTL_MODE 0x11
-.macro CCTL_SIZE 0x01
+.value CONSOLE 0x1000
+.value CCTL_MODE 0x11
+.value CCTL_SIZE 0x01
 
 restart:
     ; Set up stack at 0x8000
@@ -504,7 +504,7 @@ S_echo:
 .string "echo "
 
 B_input:
-.res 256
+.resv 256
 
 B_printint:
-.res 6
+.resv 6

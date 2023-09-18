@@ -7,6 +7,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #define AS_VER_MAJOR 0
@@ -137,11 +138,18 @@ class assembler
         std::function<void(assembler&, source_line&)> method;
     };
 
+    struct named_value
+    {
+        std::string name;
+        int value;
+    };
+
     struct link_point
     {
         std::string symbol;
         size_t offset;
         source_line decl_line;
+        int line_offset;
     };
 
     enum class register_width
@@ -164,6 +172,7 @@ class assembler
 
     /* State variables. */
     std::vector<link_point> m_link_points;
+    std::vector<named_value> m_values;
     std::vector<label> m_labels;
     std::string m_last_label;
     bytebuffer m_code;
@@ -176,7 +185,10 @@ class assembler
 
     void insert_instruction(std::initializer_list<byte> bytes);
     void add_link_point(source_line&, const std::string& symbol,
-                        size_t code_offset);
+                        size_t code_offset, int line_offset);
+
+    int resolve_address_or_link(source_line&, const std::string& symbol,
+                                size_t code_offset, int line_offset);
 
     void link(const link_point&);
 
@@ -188,7 +200,20 @@ class assembler
     void directive_string(source_line&);
     void directive_byte(source_line&);
     void directive_resv(source_line&);
-    void directive_macro(source_line&);
+    void directive_value(source_line&);
+
+    enum class arg_type
+    {
+        REGISTER,
+        IMM8,
+        IMM16,
+    };
+
+    using arg_variant = std::variant<byte, int>;
+
+    std::vector<arg_variant>
+    parse_args(source_line&, std::initializer_list<arg_type> argument_types,
+               std::initializer_list<std::string> error_messages);
 
     /* Instruction with no arguments. */
     void ins_no_arguments(source_line&);
@@ -197,8 +222,25 @@ class assembler
        immediate. */
     void ins_dest_and_any(source_line&);
 
+    /* Instruction with a destination register, and a source register or
+       immediate (only 8-bit). */
+    void ins_dest_and_r8(source_line&);
+
+    /* Instruction with a destination register and an address. */
+    void ins_dest_and_addr(source_line&);
+
     /* Instruction with a single address. */
     void ins_addr(source_line&);
+
+    /* Instruction with a single register. */
+    void ins_register(source_line&);
+
+    /* Load & store instructions. */
+    void ins_load(source_line&);
+    void ins_store(source_line&);
+
+    void ins_load_and_store(source_line&, byte r_instruction,
+                            byte imm16_instruction);
 
     void error(const source_line&, int position_in_line, const char *fmt, ...);
     void warn(warning_type warning, const source_line&, int position_in_line,
