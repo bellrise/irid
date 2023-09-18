@@ -28,20 +28,31 @@ struct iof_header
     u16 h_symbols_addr;
     u16 h_links_count;
     u16 h_links_addr;
+    u16 h_exports_count;
+    u16 h_exports_addr;
     u16 h_bin_size;
     u16 h_bin_addr;
 };
 
+/* String. */
 struct iof_symbol
 {
     u16 s_id;
     u16 s_nameaddr;
 };
 
+/* Link point in binary code. */
 struct iof_link
 {
     u16 l_id;
     u16 l_addr;
+};
+
+/* Exported symbol. */
+struct iof_export
+{
+    u16 e_id;
+    u16 e_offset;
 };
 
 #endif /* IRID_IOF_H */

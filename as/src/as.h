@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <irid/iof.h>
 #include <optional>
 #include <string>
 #include <variant>
@@ -67,6 +68,13 @@ class bytebuffer
     void insert_range(range<byte>&, size_t starting_index);
     void insert_fill(byte with_byte, size_t starting_index, size_t len);
 
+    template <typename T>
+    void append_range(const T *ptr, size_t size)
+    {
+        range<T> r = {ptr, size};
+        append_range(r);
+    }
+
     byte at(size_t index) const;
     range<byte> get_range(size_t starting_index, size_t len) const;
 
@@ -83,6 +91,35 @@ enum struct warning_type
 {
     OVERLAPING_ORG,
     _WARNING_TYPE_LEN
+};
+
+class iof_builder
+{
+  public:
+    iof_builder(const bytebuffer& source_code);
+    iof_builder(bytebuffer&& source_code);
+
+    void add_link(const std::string& link_destination, size_t offset);
+    void add_export(const std::string& exported_name, size_t offset);
+
+    bytebuffer build();
+
+  private:
+    std::vector<std::pair<std::string, u16>> m_symbols;
+    std::vector<iof_export> m_exports;
+    std::vector<iof_link> m_links;
+    bytebuffer m_code;
+
+    u16 symbol_id(const std::string& symbol);
+
+    using named_addr = std::pair<std::string, u16>;
+
+    std::vector<named_addr> build_symbol_table(bytebuffer&);
+    void build_symbol_strings(bytebuffer&,
+                              const std::vector<named_addr>& placement_addrs);
+
+    void build_link_table(bytebuffer&);
+    void build_export_table(bytebuffer&);
 };
 
 /**
@@ -132,6 +169,13 @@ class assembler
         int declaration_line;
     };
 
+    struct exported_name
+    {
+        std::string name;
+        source_line decl_line;
+        int line_offset;
+    };
+
     struct named_method
     {
         std::string name;
@@ -172,6 +216,7 @@ class assembler
 
     /* State variables. */
     std::vector<link_point> m_link_points;
+    std::vector<exported_name> m_exports;
     std::vector<named_value> m_values;
     std::vector<label> m_labels;
     std::string m_last_label;
@@ -201,6 +246,7 @@ class assembler
     void directive_byte(source_line&);
     void directive_resv(source_line&);
     void directive_value(source_line&);
+    void directive_export(source_line&);
 
     enum class arg_type
     {
@@ -254,6 +300,8 @@ class assembler
     try_parse_register(const std::string& register_representation);
     byte instruction_id_from_mnemonic(const std::string& mnemonic);
     register_width get_register_width(byte register_id);
+
+    std::optional<label> find_label(const std::string& name);
 
     static std::vector<std::string>
     split_string_parts(const std::string&, std::vector<int>& part_offsets);

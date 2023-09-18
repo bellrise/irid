@@ -56,7 +56,21 @@ bool assembler::assemble()
 
 bytebuffer assembler::as_object()
 {
-    return bytebuffer();
+    iof_builder builder = m_code;
+
+    for (const auto& link : m_link_points)
+        builder.add_link(link.symbol, link.offset);
+    for (const auto& exported_name : m_exports) {
+        auto maybe_label = find_label(exported_name.name);
+        if (!maybe_label.has_value()) {
+            error(exported_name.decl_line, exported_name.line_offset,
+                  "trying to export symbol that does not exist");
+        }
+
+        builder.add_export(exported_name.name, maybe_label.value().offset);
+    }
+
+    return builder.build();
 }
 
 bytebuffer assembler::as_raw_binary()
@@ -87,6 +101,8 @@ void assembler::register_directive_methods()
     m_directives.push_back(named_method("byte", &assembler::directive_byte));
     m_directives.push_back(named_method("resv", &assembler::directive_resv));
     m_directives.push_back(named_method("value", &assembler::directive_value));
+    m_directives.push_back(
+        named_method("export", &assembler::directive_export));
 }
 
 void assembler::register_instruction_methods()
@@ -407,6 +423,21 @@ void assembler::directive_value(source_line& line)
 
     value = parse_int(line.parts[2], line, line.part_offsets[2]);
     m_values.push_back({name, value});
+}
+
+void assembler::directive_export(source_line& line)
+{
+    if (line.parts.size() < 2)
+        error(line, line.str.size(), "expected a name");
+    if (line.parts.size() > 2)
+        error(line, line.part_offsets[1], "too many arguments");
+
+    if (!is_valid_symbol(line.parts[1])) {
+        error(line, line.part_offsets[1],
+              "exported symbol needs to be a valid name");
+    }
+
+    m_exports.push_back({line.parts[1], line, line.part_offsets[1]});
 }
 
 std::vector<assembler::arg_variant>
@@ -953,6 +984,16 @@ assembler::register_width assembler::get_register_width(byte register_id)
     if (int(register_id) >= R_H0 && int(register_id) <= R_L3)
         return register_width::BYTE;
     return register_width::WORD;
+}
+
+std::optional<assembler::label> assembler::find_label(const std::string& name)
+{
+    for (label& lbl : m_labels) {
+        if (lbl.name == name)
+            return lbl;
+    }
+
+    return {};
 }
 
 std::vector<std::string>
