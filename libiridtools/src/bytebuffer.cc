@@ -1,9 +1,8 @@
 /* Irid assembler
    Copyright (c) 2023 bellrise */
 
-#include "as.h"
-
 #include <cstring>
+#include <libiridtools/bytebuffer.h>
 #include <stdexcept>
 
 bytebuffer::bytebuffer()
@@ -13,6 +12,9 @@ bytebuffer::bytebuffer()
 { }
 
 bytebuffer::bytebuffer(const bytebuffer& copy)
+    : m_alloc(nullptr)
+    , m_size(0)
+    , m_space(0)
 {
     ensure_size(copy.m_size);
     std::memcpy(m_alloc, copy.m_alloc, copy.m_size);
@@ -53,7 +55,7 @@ void bytebuffer::append(byte byte)
     m_alloc[m_size++] = byte;
 }
 
-void bytebuffer::append_range(range<byte>& bytes)
+void bytebuffer::append_range(range<byte> bytes)
 {
     ensure_size(m_size + bytes.len);
     std::memcpy(&m_alloc[m_size], bytes.ptr, bytes.len);
@@ -67,7 +69,7 @@ void bytebuffer::insert(byte byte, size_t index)
     m_size = std::max(m_size, index + 1);
 }
 
-void bytebuffer::insert_range(range<byte>& bytes, size_t starting_index)
+void bytebuffer::insert_range(range<byte> bytes, size_t starting_index)
 {
     ensure_size(starting_index + bytes.len);
     std::memcpy(&m_alloc[starting_index], bytes.ptr, bytes.len);

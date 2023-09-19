@@ -11,10 +11,11 @@ static void parse_warn_flag(options&, std::string option_name);
 
 void opt_set_defaults(options& opts)
 {
-    opts.output = "out.bin";
+    opts.output = "out.iof";
     opts.input = "-";
 
     opts.warn_origin_overlap = true;
+    opts.raw_binary = false;
 }
 
 void opt_set_warnings_for_as(assembler& as, options& opts)
@@ -29,13 +30,14 @@ void opt_parse(options& opts, int argc, char **argv)
 
     static struct option long_opts[] = {{"help", no_argument, 0, 'h'},
                                         {"output", required_argument, 0, 'o'},
+                                        {"raw", no_argument, 0, 'r'},
                                         {"version", no_argument, 0, 'v'},
                                         {0, 0, 0, 0}};
 
     opt_index = 0;
 
     while (1) {
-        c = getopt_long(argc, argv, "ho:vW:", long_opts, &opt_index);
+        c = getopt_long(argc, argv, "ho:rvW:", long_opts, &opt_index);
         if (c == -1)
             break;
 
@@ -45,6 +47,9 @@ void opt_parse(options& opts, int argc, char **argv)
             exit(0);
         case 'o':
             opts.output = optarg;
+            break;
+        case 'r':
+            opts.raw_binary = true;
             break;
         case 'v':
             printf("irid-as %d.%d\n", AS_VER_MAJOR, AS_VER_MINOR);

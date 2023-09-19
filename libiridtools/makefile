@@ -1,9 +1,9 @@
-# irid-as build rules
+# libiridtools build rules
 # Copyright (c) 2023 bellrise
 
 CXX ?= clang++
 
-CFLAGS    += -Wall -Wextra -std=c++2a -I../include -I../libiridtools/include
+CFLAGS    += -Wall -Wextra -std=c++2a -I./include
 LDFLAGS   +=
 MAKEFLAGS += -j$(nproc)
 
@@ -12,8 +12,7 @@ PREFIX := /usr/local
 SRC := $(wildcard src/*.cc)
 DEP := $(wildcard src/*.h)
 OBJ := $(patsubst src/%.cc,build/%.o,$(SRC))
-LIB := ../libiridtools/build/libiridtools.a
-BIN := irid-as
+BIN := libiridtools.a
 OUT := build/$(BIN)
 BT  ?= debug
 
@@ -47,8 +46,8 @@ compile_flags.txt:
 	echo $(CFLAGS) -xc++ | tr ' ' '\n' > compile_flags.txt
 
 $(OUT): $(OBJ)
-	@echo "  LD $@"
-	@$(CXX) -o $@ $(CFLAGS) $(LDFLAGS) $^ $(LIB)
+	@echo "  AR $@"
+	@ar r $(OUT) $(OBJ)
 
 build/%.o: src/%.cc $(DEP)
 	@echo "  CXX $<"

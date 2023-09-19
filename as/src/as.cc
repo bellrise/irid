@@ -22,7 +22,8 @@ int main(int argc, char **argv)
 
     as.assemble();
 
-    write_to_output(as.as_raw_binary(), opts.output);
+    write_to_output(opts.raw_binary ? as.as_raw_binary() : as.as_object(),
+                    opts.output);
 }
 
 std::string read_input(const std::string& path)

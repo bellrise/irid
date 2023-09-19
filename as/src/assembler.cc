@@ -16,6 +16,8 @@ assembler::assembler(const std::string& inputname, const std::string& source)
     : m_inputname(inputname)
     , m_source(source)
 {
+    reset_state_variables();
+
     m_warnings.fill(true);
     register_directive_methods();
     register_instruction_methods();
@@ -48,9 +50,6 @@ bool assembler::assemble()
         }
     }
 
-    for (const link_point& link_point : m_link_points)
-        link(link_point);
-
     return false;
 }
 
@@ -75,6 +74,9 @@ bytebuffer assembler::as_object()
 
 bytebuffer assembler::as_raw_binary()
 {
+    for (const link_point& link_point : m_link_points)
+        link(link_point);
+
     return m_code;
 }
 
@@ -88,7 +90,11 @@ void assembler::set_warning(warning_type warning, bool true_or_false)
 void assembler::reset_state_variables()
 {
     m_link_points.clear();
+    m_last_label.clear();
+    m_exports.clear();
+    m_values.clear();
     m_labels.clear();
+    m_code.clear();
     m_code.clear();
     m_pos = 0;
 }
@@ -438,6 +444,19 @@ void assembler::directive_export(source_line& line)
     }
 
     m_exports.push_back({line.parts[1], line, line.part_offsets[1]});
+}
+
+void assembler::directive_decl(source_line& line)
+{
+    if (line.parts.size() < 2)
+        error(line, line.str.size(), "expected a name");
+    if (line.parts.size() > 2)
+        error(line, line.part_offsets[1], "too many arguments");
+
+    if (!is_valid_symbol(line.parts[1])) {
+        error(line, line.part_offsets[1],
+              "exported symbol needs to be a valid name");
+    }
 }
 
 std::vector<assembler::arg_variant>

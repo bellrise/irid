@@ -1,4 +1,4 @@
-# irid-as build rules
+# irid-ld build rules
 # Copyright (c) 2023 bellrise
 
 CXX ?= clang++
@@ -12,13 +12,14 @@ PREFIX := /usr/local
 SRC := $(wildcard src/*.cc)
 DEP := $(wildcard src/*.h)
 OBJ := $(patsubst src/%.cc,build/%.o,$(SRC))
+BIN := irid-ld
 LIB := ../libiridtools/build/libiridtools.a
-BIN := irid-as
 OUT := build/$(BIN)
 BT  ?= debug
 
 ifeq ($(BT), debug)
-	CFLAGS += -O0 -ggdb -DDEBUG=1
+	CFLAGS += -O0 -ggdb -DDEBUG=1 -fsanitize=address
+	LDFLAGS += -fsanitize=address
 else ifeq ($(BT), release)
 	CFLAGS += -O3
 else

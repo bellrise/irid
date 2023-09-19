@@ -31,14 +31,28 @@ bytebuffer iof_builder::build()
 
     buf.append_range<byte>((const byte *) &header, sizeof(header));
 
+    std::memcpy(header.h_magic, IOF_MAGIC, 4);
+    header.h_format = IOF_FORMAT;
+
     header.h_symbols_count = m_symbols.size();
     header.h_symbols_addr = buf.len();
     placement_addrs = build_symbol_table(buf);
 
     header.h_links_count = m_links.size();
     header.h_links_addr = buf.len();
+    build_link_table(buf);
+
+    header.h_exports_count = m_exports.size();
+    header.h_exports_addr = buf.len();
+    build_export_table(buf);
+
+    header.h_bin_size = m_code.len();
+    header.h_bin_addr = buf.len();
+    build_code(buf);
 
     build_symbol_strings(buf, placement_addrs);
+
+    buf.insert_range(range<byte>((const byte *) &header, sizeof(header)), 0);
 
     return buf;
 }
@@ -73,7 +87,18 @@ iof_builder::build_symbol_table(bytebuffer& buf)
 void iof_builder::build_symbol_strings(
     bytebuffer& buf, const std::vector<named_addr>& placement_addrs)
 {
-    // TODO: place strings & link the nameaddr in string table
+    u16 addr;
+    for (const named_addr& placement : placement_addrs) {
+        addr = buf.len();
+        buf.insert_range(range<byte>((byte *) &addr, 2), placement.second);
+        buf.append_range(placement.first.c_str(), placement.first.length());
+        buf.append(0);
+    }
+}
+
+void iof_builder::build_code(bytebuffer& buf)
+{
+    buf.append_range(m_code.get_range(0, m_code.len()));
 }
 
 void iof_builder::build_link_table(bytebuffer& buf)

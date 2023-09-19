@@ -9,7 +9,7 @@ for source in $sources; do
     name=$(echo $(basename "$source") | cut -d'.' -f1)
 
     total=$(($total + 1))
-    irid-as -o build/result.bin tests/$name.i
+    irid-as -r -o build/result.bin tests/$name.i
     [ ! -f build/result.bin ] && {
         echo "[-] Failed $name"
         failed=$(($failed + 1))

@@ -6,13 +6,14 @@
 #include <cstddef>
 #include <functional>
 #include <irid/iof.h>
+#include <libiridtools/bytebuffer.h>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
 #define AS_VER_MAJOR 0
-#define AS_VER_MINOR 1
+#define AS_VER_MINOR 6
 
 struct options
 {
@@ -20,6 +21,7 @@ struct options
     std::string output;
     bool warn_origin_overlap;
     bool warn_comma_after_arg;
+    bool raw_binary;
 };
 
 class assembler;
@@ -27,65 +29,6 @@ class assembler;
 void opt_set_defaults(options&);
 void opt_set_warnings_for_as(assembler&, options&);
 void opt_parse(options&, int argc, char **argv);
-
-template <typename T>
-struct range
-{
-    const T *ptr;
-    const size_t len;
-
-    range(const T *ptr, size_t len)
-        : ptr(ptr)
-        , len(len)
-    { }
-};
-
-template <typename T>
-range<T> range_from_string(const std::string& str)
-{
-    return range<T>(reinterpret_cast<const T *>(str.c_str()), str.size());
-}
-
-typedef unsigned char byte;
-
-/**
- * Class for storing a range of raw bytes, without any specific memory layout.
- */
-class bytebuffer
-{
-  public:
-    bytebuffer();
-    bytebuffer(const bytebuffer&);
-    bytebuffer(bytebuffer&&);
-    ~bytebuffer();
-
-    size_t len() const;
-    void clear();
-
-    void append(byte);
-    void append_range(range<byte>&);
-    void insert(byte, size_t index);
-    void insert_range(range<byte>&, size_t starting_index);
-    void insert_fill(byte with_byte, size_t starting_index, size_t len);
-
-    template <typename T>
-    void append_range(const T *ptr, size_t size)
-    {
-        range<T> r = {ptr, size};
-        append_range(r);
-    }
-
-    byte at(size_t index) const;
-    range<byte> get_range(size_t starting_index, size_t len) const;
-
-  private:
-    byte *m_alloc;
-    size_t m_size;
-    size_t m_space;
-
-    byte *checked_new(size_t allocation_size);
-    void ensure_size(size_t required_size);
-};
 
 enum struct warning_type
 {
@@ -118,6 +61,7 @@ class iof_builder
     void build_symbol_strings(bytebuffer&,
                               const std::vector<named_addr>& placement_addrs);
 
+    void build_code(bytebuffer&);
     void build_link_table(bytebuffer&);
     void build_export_table(bytebuffer&);
 };
@@ -247,6 +191,7 @@ class assembler
     void directive_resv(source_line&);
     void directive_value(source_line&);
     void directive_export(source_line&);
+    void directive_decl(source_line&);
 
     enum class arg_type
     {
