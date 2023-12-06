@@ -1,3 +1,4 @@
 emul/build
 as/build
+libiridtools/build
 *.bin

@@ -2,6 +2,7 @@
    Copyright (c) 2023 bellrise */
 
 #pragma once
+
 #include <stddef.h>
 #include <string>
 
@@ -54,6 +55,8 @@ class bytebuffer
 
     byte at(size_t index) const;
     range<byte> get_range(size_t starting_index, size_t len) const;
+
+    bytebuffer& operator=(const bytebuffer&);
 
   private:
     byte *m_alloc;

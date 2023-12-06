@@ -1,4 +1,4 @@
-/* Irid assembler
+/* libiridtools
    Copyright (c) 2023 bellrise */
 
 #include <cstring>
@@ -16,9 +16,7 @@ bytebuffer::bytebuffer(const bytebuffer& copy)
     , m_size(0)
     , m_space(0)
 {
-    ensure_size(copy.m_size);
-    std::memcpy(m_alloc, copy.m_alloc, copy.m_size);
-    m_size = copy.m_size;
+    *this = copy;
 }
 
 bytebuffer::bytebuffer(bytebuffer&& moved)
@@ -105,6 +103,14 @@ range<byte> bytebuffer::get_range(size_t starting_index, size_t len) const
         range_len = m_size - starting_index;
 
     return range<byte>(&m_alloc[starting_index], range_len);
+}
+
+bytebuffer& bytebuffer::operator=(const bytebuffer& copy)
+{
+    ensure_size(copy.m_size);
+    std::memcpy(m_alloc, copy.m_alloc, copy.m_size);
+    m_size = copy.m_size;
+    return *this;
 }
 
 byte *bytebuffer::checked_new(size_t allocation_size)
