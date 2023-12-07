@@ -15,6 +15,7 @@ struct options
     std::vector<std::string> inputs;
 };
 
+void opt_set_defaults(options&);
 void opt_parse(options& opts, int argc, char **argv);
 
 struct linker
@@ -26,5 +27,11 @@ struct linker
 
   private:
 };
+
+#if defined DEBUG
+void debug(const char *fmt, ...);
+#else
+# define debug(...)
+#endif
 
 void die(const char *fmt, ...);

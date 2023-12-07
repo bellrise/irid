@@ -8,6 +8,11 @@
 static void short_usage();
 static void usage();
 
+void opt_set_defaults(options& opts)
+{
+    opts.output = "out.bin";
+}
+
 void opt_parse(options& opts, int argc, char **argv)
 {
     int opt_index;

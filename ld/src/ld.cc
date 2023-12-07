@@ -31,7 +31,7 @@ static void write_file(const std::string& file, const bytebuffer& buf)
 
     f.open(file);
     if (!f.is_open())
-        die("failed to open output file %s", file.c_str());
+        die("failed to open output file '%s'", file.c_str());
 
     auto r = buf.get_range(0, buf.len());
     f.write((char *) r.ptr, r.len);
@@ -42,6 +42,7 @@ int main(int argc, char **argv)
     options opts;
     linker link;
 
+    opt_set_defaults(opts);
     opt_parse(opts, argc, argv);
 
     for (const std::string& input : opts.inputs)
