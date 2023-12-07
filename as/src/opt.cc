@@ -7,6 +7,7 @@
 
 static void short_usage();
 static void usage();
+static void version();
 static void parse_warn_flag(options&, std::string option_name);
 
 void opt_set_defaults(options& opts)
@@ -52,7 +53,7 @@ void opt_parse(options& opts, int argc, char **argv)
             opts.raw_binary = true;
             break;
         case 'v':
-            printf("irid-as %d.%d\n", AS_VER_MAJOR, AS_VER_MINOR);
+            version();
             exit(0);
         case 'W':
             parse_warn_flag(opts, optarg);
@@ -75,10 +76,20 @@ void usage()
     puts("\nAssemble Irid native assembly code into a binary format.");
     puts("Reads from stdin by default.\n");
     printf("Options:\n"
-           "  -h, --help              show this usage page\n"
-           "  -o, --output OUTPUT     output to a file (default out.bin)\n"
-           "  -v, --version           show the version and exit\n"
-           "  -Worigin-overlap        .org may cause code overlap\n");
+           "  -h, --help            show this usage page\n"
+           "  -o, --output OUTPUT   output to a file (default out.bin)\n"
+           "  -r, --raw             output raw binary\n"
+           "  -v, --version         show the version and exit\n"
+           "  -Worigin-overlap      .org may cause code overlap\n");
+}
+
+void version()
+{
+#if defined DEBUG
+    printf("irid-as %d.%d (debug)\n", AS_VER_MAJOR, AS_VER_MINOR);
+#else
+    printf("irid-as %d.%d\n", AS_VER_MAJOR, AS_VER_MINOR);
+#endif
 }
 
 void parse_warn_flag(options& opts, std::string option_name)

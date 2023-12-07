@@ -2,3 +2,5 @@ emul/build
 as/build
 libiridtools/build
 *.bin
+*.out
+*.iof

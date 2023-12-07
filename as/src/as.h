@@ -7,13 +7,14 @@
 #include <functional>
 #include <irid/iof.h>
 #include <libiridtools/bytebuffer.h>
+#include <libiridtools/iof_builder.h>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
 #define AS_VER_MAJOR 0
-#define AS_VER_MINOR 6
+#define AS_VER_MINOR 7
 
 struct options
 {
@@ -34,36 +35,6 @@ enum struct warning_type
 {
     OVERLAPING_ORG,
     _WARNING_TYPE_LEN
-};
-
-class iof_builder
-{
-  public:
-    iof_builder(const bytebuffer& source_code);
-    iof_builder(bytebuffer&& source_code);
-
-    void add_link(const std::string& link_destination, size_t offset);
-    void add_export(const std::string& exported_name, size_t offset);
-
-    bytebuffer build();
-
-  private:
-    std::vector<std::pair<std::string, u16>> m_symbols;
-    std::vector<iof_export> m_exports;
-    std::vector<iof_link> m_links;
-    bytebuffer m_code;
-
-    u16 symbol_id(const std::string& symbol);
-
-    using named_addr = std::pair<std::string, u16>;
-
-    std::vector<named_addr> build_symbol_table(bytebuffer&);
-    void build_symbol_strings(bytebuffer&,
-                              const std::vector<named_addr>& placement_addrs);
-
-    void build_code(bytebuffer&);
-    void build_link_table(bytebuffer&);
-    void build_export_table(bytebuffer&);
 };
 
 /**

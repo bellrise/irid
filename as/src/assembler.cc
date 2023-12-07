@@ -55,19 +55,36 @@ bool assembler::assemble()
 
 bytebuffer assembler::as_object()
 {
-    iof_builder builder = m_code;
+    iof_builder builder;
+    iof_section_builder section;
+    bool found_label;
 
-    for (const auto& link : m_link_points)
-        builder.add_link(link.symbol, link.offset);
-    for (const auto& exported_name : m_exports) {
-        auto maybe_label = find_label(exported_name.name);
-        if (!maybe_label.has_value()) {
-            error(exported_name.decl_line, exported_name.line_offset,
-                  "trying to export symbol that does not exist");
+    section.set_code(m_code);
+    section.set_name(m_inputname);
+    section.set_flag(0);
+    section.set_origin(0);
+
+    for (const link_point& link_point : m_link_points)
+        section.add_link(link_point.symbol, link_point.offset);
+    for (const exported_name& exported_name : m_exports) {
+        /* We need to find the exported name in the label array. */
+
+        found_label = false;
+        for (const label& label : m_labels) {
+            if (label.name == exported_name.name) {
+                section.add_export(label.name, label.offset);
+                found_label = true;
+                break;
+            }
         }
 
-        builder.add_export(exported_name.name, maybe_label.value().offset);
+        if (!found_label) {
+            error(exported_name.decl_line, exported_name.line_offset,
+                  "cannot find exported label");
+        }
     }
+
+    builder.add_section(section);
 
     return builder.build();
 }
