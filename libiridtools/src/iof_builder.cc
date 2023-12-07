@@ -6,57 +6,65 @@
 #include <libiridtools/iof_builder.h>
 #include <stdexcept>
 
-iof_builder::iof_builder() { }
-
-iof_builder& iof_builder::add_section(iof_section_builder& section)
-{
-    m_sections.push_back(section);
-    return *this;
-}
-
 bytebuffer iof_builder::build()
 {
+    bytebuffer res;
     iof_header header;
+    iof_section section_header;
+    iof_pointer ptr;
 
+    memset(&header, 0, sizeof(header));
     memcpy(header.h_magic, IOF_MAGIC, 4);
+
     header.h_format = IOF_FORMAT;
-    header.h_0 = 0;
-
     header.h_section_count = m_sections.size();
-    header.h_strings_count = m_strings.size();
+    header.h_section_addr = sizeof(header);
 
-    /* Start the buffer after the IOF header. */
-    m_buffer.insert_fill(0, 0, sizeof(iof_header));
+    res.append_range(&header, sizeof(header));
+    res.insert_fill(0, sizeof(header), sizeof(iof_pointer) * m_sections.size());
 
-    for (iof_section_builder& section : m_sections) {
-        add_strings_from_section(section);
+    for (size_t i = 0; i < m_sections.size(); i++) {
+        section& sec = m_sections[i];
+        size_t section_offset;
+
+        section_offset = res.len();
+
+        /* Read the section header from the byte buffer, update its offsets and
+           write it back to the buffer, writing it to the file. */
+        range header = sec.source.get_range(0, sizeof(iof_section));
+        memcpy(&section_header, header.ptr, header.len);
+
+        section_header.s_code_addr += section_offset;
+        section_header.s_links_addr += section_offset;
+        section_header.s_exports_addr += section_offset;
+        section_header.s_strings_addr += section_offset;
+        section_header.s_sname_addr += section_offset;
+
+        ptr.p_addr = section_offset;
+
+        /* Copy the header back to the section buffer. */
+        sec.source.insert_range(
+            range<byte>(reinterpret_cast<byte *>(&section_header),
+                        sizeof(iof_section)),
+            0);
+
+        /* Insert pointer to section. */
+        res.insert_range(range<byte>(&ptr, sizeof(ptr)),
+                         sizeof(header) + sizeof(iof_pointer) * i);
+
+        /* Append section. */
+        res.append_buffer(sec.source);
     }
 
-    return m_buffer;
+    return res;
 }
 
-u16 iof_builder::register_string(const std::string& val)
+void iof_builder::add_section(const iof_section_builder& part)
 {
-    string_resource res;
+    section res;
 
-    for (const string_resource& res : m_strings) {
-        if (res.value == val)
-            return res.id;
-    }
+    res.source = part.build();
+    res.file_offset = 0;
 
-    /* Register a new string. */
-
-    res.id = m_strings.size();
-    res.value = val;
-    m_strings.push_back(res);
-
-    return res.id;
-}
-
-void iof_builder::add_strings_from_section(iof_section_builder& section)
-{
-    for (const auto& thing : section.m_exports)
-        register_string(thing.second);
-    for (const auto& thing : section.m_links)
-        register_string(thing.second);
+    m_sections.push_back(res);
 }

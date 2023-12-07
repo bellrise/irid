@@ -9,57 +9,60 @@
 #include <string>
 #include <vector>
 
+class iof_builder;
 class iof_section_builder;
 
 class iof_builder
 {
   public:
-    iof_builder();
-
-    iof_builder& add_section(iof_section_builder&);
+    /* Returns the built IOF file. */
     bytebuffer build();
 
+    void add_section(const iof_section_builder& section);
+
   private:
-    struct string_resource
+    struct section
     {
-        u16 id;
-        std::string value;
+        bytebuffer source;
+        size_t file_offset;
     };
 
-    std::vector<iof_section_builder> m_sections;
-    std::vector<string_resource> m_strings;
-    bytebuffer m_buffer;
-
-    /* Utils */
-    u16 register_string(const std::string& val);
-
-    void add_strings_from_section(iof_section_builder&);
+    std::vector<section> m_sections;
 };
 
 class iof_section_builder
 {
-    friend class iof_builder;
-
   public:
-    iof_section_builder();
+    /* Returns the built section. */
+    bytebuffer build() const;
 
-    iof_section_builder& set_name(const std::string& name);
-    iof_section_builder& set_origin(size_t origin_addr);
-    iof_section_builder& set_code(bytebuffer code);
-    iof_section_builder& add_link(size_t offset, const std::string& symbol);
-    iof_section_builder& add_export(size_t offset, const std::string& symbol);
+    void set_code(bytebuffer buf);
+    void set_origin(u16 origin);
+    void set_flag(u16 flags);
+    void set_name(const std::string& name);
 
-    std::string name() const;
-    size_t origin() const;
+    void add_link(const std::string& to, u16 addr);
+    void add_export(const std::string& label, u16 offset);
 
   private:
-    std::vector<std::pair<size_t, std::string>> m_exports;
-    std::vector<std::pair<size_t, std::string>> m_links;
-    std::string m_name;
-    bytebuffer m_code;
-    size_t m_origin;
+    struct string
+    {
+        std::string val;
+        u16 id;
+        u16 addr;
 
-    std::vector<std::pair<size_t, std::string>> exports() const;
-    std::vector<std::pair<size_t, std::string>> links() const;
-    bytebuffer code() const;
+        string(const std::string& val, u16 id)
+            : val(val)
+            , id(id)
+        { }
+    };
+
+    iof_section m_header;
+    bytebuffer m_code;
+    std::string m_name;
+    std::vector<string> m_strings;
+    std::vector<iof_link> m_links;
+    std::vector<iof_export> m_exports;
+
+    u16 string_id(const std::string& str);
 };

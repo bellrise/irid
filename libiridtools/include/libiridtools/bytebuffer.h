@@ -18,6 +18,12 @@ struct range
         : ptr(ptr)
         , len(len)
     { }
+
+    template <typename K>
+    range(const K *ptr, size_t len)
+        : ptr(reinterpret_cast<const T *>(ptr))
+        , len(len)
+    { }
 };
 
 template <typename T>
@@ -40,8 +46,13 @@ class bytebuffer
     size_t len() const;
     void clear();
 
+    /* Freezing the buffer makes the pointer from get_range safe to use. */
+    void freeze();
+    void unfreeze();
+
     void append(byte);
     void append_range(range<byte>);
+    void append_buffer(const bytebuffer&);
     void insert(byte, size_t index);
     void insert_range(range<byte>, size_t starting_index);
     void insert_fill(byte with_byte, size_t starting_index, size_t len);
@@ -62,7 +73,9 @@ class bytebuffer
     byte *m_alloc;
     size_t m_size;
     size_t m_space;
+    bool m_frozen;
 
+    void check_freeze();
     byte *checked_new(size_t allocation_size);
     void ensure_size(size_t required_size);
 };

@@ -9,12 +9,14 @@ bytebuffer::bytebuffer()
     : m_alloc(nullptr)
     , m_size(0)
     , m_space(0)
+    , m_frozen(false)
 { }
 
 bytebuffer::bytebuffer(const bytebuffer& copy)
     : m_alloc(nullptr)
     , m_size(0)
     , m_space(0)
+    , m_frozen(false)
 {
     *this = copy;
 }
@@ -23,14 +25,17 @@ bytebuffer::bytebuffer(bytebuffer&& moved)
     : m_alloc(moved.m_alloc)
     , m_size(moved.m_size)
     , m_space(moved.m_space)
+    , m_frozen(moved.m_frozen)
 {
     moved.m_alloc = nullptr;
     moved.m_size = 0;
     moved.m_space = 0;
+    moved.m_frozen = false;
 }
 
 bytebuffer::~bytebuffer()
 {
+    unfreeze();
     clear();
 }
 
@@ -39,8 +44,19 @@ size_t bytebuffer::len() const
     return m_size;
 }
 
+void bytebuffer::freeze()
+{
+    m_frozen = true;
+}
+
+void bytebuffer::unfreeze()
+{
+    m_frozen = false;
+}
+
 void bytebuffer::clear()
 {
+    check_freeze();
     delete[] m_alloc;
     m_alloc = nullptr;
     m_space = 0;
@@ -49,19 +65,28 @@ void bytebuffer::clear()
 
 void bytebuffer::append(byte byte)
 {
+    check_freeze();
     ensure_size(m_size + 1);
     m_alloc[m_size++] = byte;
 }
 
 void bytebuffer::append_range(range<byte> bytes)
 {
+    check_freeze();
     ensure_size(m_size + bytes.len);
     std::memcpy(&m_alloc[m_size], bytes.ptr, bytes.len);
     m_size += bytes.len;
 }
 
+void bytebuffer::append_buffer(const bytebuffer& buf)
+{
+    check_freeze();
+    append_range(buf.get_range(0, buf.len()));
+}
+
 void bytebuffer::insert(byte byte, size_t index)
 {
+    check_freeze();
     ensure_size(index + 1);
     m_alloc[index] = byte;
     m_size = std::max(m_size, index + 1);
@@ -69,6 +94,7 @@ void bytebuffer::insert(byte byte, size_t index)
 
 void bytebuffer::insert_range(range<byte> bytes, size_t starting_index)
 {
+    check_freeze();
     ensure_size(starting_index + bytes.len);
     std::memcpy(&m_alloc[starting_index], bytes.ptr, bytes.len);
     m_size = std::max(m_size, starting_index + bytes.len);
@@ -76,6 +102,7 @@ void bytebuffer::insert_range(range<byte> bytes, size_t starting_index)
 
 void bytebuffer::insert_fill(byte with_byte, size_t starting_index, size_t len)
 {
+    check_freeze();
     ensure_size(starting_index + len);
     std::memset(&m_alloc[starting_index], with_byte, len);
     m_size = std::max(m_size, starting_index + len);
@@ -107,10 +134,17 @@ range<byte> bytebuffer::get_range(size_t starting_index, size_t len) const
 
 bytebuffer& bytebuffer::operator=(const bytebuffer& copy)
 {
+    check_freeze();
     ensure_size(copy.m_size);
     std::memcpy(m_alloc, copy.m_alloc, copy.m_size);
     m_size = copy.m_size;
     return *this;
+}
+
+void bytebuffer::check_freeze()
+{
+    if (m_frozen)
+        throw std::runtime_error("tried to modify frozen bytebuffer");
 }
 
 byte *bytebuffer::checked_new(size_t allocation_size)
