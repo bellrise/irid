@@ -4,16 +4,20 @@
 #include "ld.h"
 
 #include <getopt.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 static void short_usage();
 static void usage();
 
-void opt_set_defaults(options& opts)
+void opt_set_defaults(struct options *opts)
 {
-    opts.output = "out.bin";
+    opts->output = "out.bin";
+    opts->inputs.strings = NULL;
+    opts->inputs.size = 0;
 }
 
-void opt_parse(options& opts, int argc, char **argv)
+void opt_parse(struct options *opts, int argc, char **argv)
 {
     int opt_index;
     int c;
@@ -35,7 +39,7 @@ void opt_parse(options& opts, int argc, char **argv)
             usage();
             exit(0);
         case 'o':
-            opts.output = optarg;
+            opts->output = optarg;
             break;
         case 'v':
             printf("irid-ld %d.%d\n", LD_VER_MAJOR, LD_VER_MINOR);
@@ -44,7 +48,7 @@ void opt_parse(options& opts, int argc, char **argv)
     }
 
     while (optind < argc)
-        opts.inputs.push_back(argv[optind++]);
+        strlist_append(&opts->inputs, argv[optind++]);
 }
 
 void short_usage()
