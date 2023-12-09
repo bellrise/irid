@@ -132,6 +132,19 @@ range<byte> bytebuffer::get_range(size_t starting_index, size_t len) const
     return range<byte>(&m_alloc[starting_index], range_len);
 }
 
+void bytebuffer::copy_out(byte *buffer, size_t starting_index, size_t len) const
+{
+    size_t to_copy = len;
+
+    if (starting_index >= m_size)
+        throw std::out_of_range("starting index in copy_out() out of range");
+
+    if (starting_index + to_copy > m_size)
+        to_copy = m_size - starting_index;
+
+    memcpy((void *) buffer, m_alloc, to_copy);
+}
+
 bytebuffer& bytebuffer::operator=(const bytebuffer& copy)
 {
     check_freeze();

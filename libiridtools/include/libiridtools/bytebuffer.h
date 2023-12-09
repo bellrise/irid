@@ -66,6 +66,13 @@ class bytebuffer
 
     byte at(size_t index) const;
     range<byte> get_range(size_t starting_index, size_t len) const;
+    void copy_out(byte *buffer, size_t starting_index, size_t len) const;
+
+    template <typename T>
+    void copy_out(T *buffer, size_t starting_index, size_t len) const
+    {
+        copy_out(reinterpret_cast<byte *>(buffer), starting_index, len);
+    }
 
     bytebuffer& operator=(const bytebuffer&);
 
