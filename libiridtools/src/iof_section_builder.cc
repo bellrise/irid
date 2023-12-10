@@ -17,6 +17,12 @@ bytebuffer iof_section_builder::build() const
     header.s_code_size = m_code.len();
     res.append_buffer(m_code);
 
+    /* Insert symbols. */
+    header.s_symbols_addr = res.len();
+    header.s_symbols_count = m_symbols.size();
+    for (const iof_symbol& sym : m_symbols)
+        res.append_range(&sym, sizeof(sym));
+
     /* Insert link points. */
     header.s_links_addr = res.len();
     header.s_links_count = m_links.size();
@@ -79,6 +85,11 @@ void iof_section_builder::set_flag(u16 flags)
 void iof_section_builder::set_name(const std::string& name)
 {
     m_name = name;
+}
+
+void iof_section_builder::add_symbol(const std::string& name, u16 offset)
+{
+    m_symbols.push_back(iof_symbol{string_id(name), offset});
 }
 
 void iof_section_builder::add_link(const std::string& to, u16 addr)

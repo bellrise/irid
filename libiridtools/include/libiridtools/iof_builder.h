@@ -41,6 +41,7 @@ class iof_section_builder
     void set_flag(u16 flags);
     void set_name(const std::string& name);
 
+    void add_symbol(const std::string& name, u16 offset);
     void add_link(const std::string& to, u16 addr);
     void add_export(const std::string& label, u16 offset);
 
@@ -61,6 +62,7 @@ class iof_section_builder
     bytebuffer m_code;
     std::string m_name;
     std::vector<string> m_strings;
+    std::vector<iof_symbol> m_symbols;
     std::vector<iof_link> m_links;
     std::vector<iof_export> m_exports;
 

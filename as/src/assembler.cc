@@ -84,6 +84,9 @@ bytebuffer assembler::as_object()
         }
     }
 
+    for (const label& lbl : m_labels)
+        section.add_symbol(lbl.name, lbl.offset);
+
     builder.add_section(section);
 
     return builder.build();

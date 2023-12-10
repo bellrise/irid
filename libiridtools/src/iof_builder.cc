@@ -17,6 +17,8 @@ bytebuffer iof_builder::build()
     memcpy(header.h_magic, IOF_MAGIC, 4);
 
     header.h_format = IOF_FORMAT;
+    header.h_addrwidth = sizeof(u16);
+    header.h_endianness = IOF_ENDIAN_LITTLE;
     header.h_section_count = m_sections.size();
     header.h_section_addr = sizeof(header);
 
@@ -33,12 +35,6 @@ bytebuffer iof_builder::build()
            write it back to the buffer, writing it to the file. */
         range header = sec.source.get_range(0, sizeof(iof_section));
         memcpy(&section_header, header.ptr, header.len);
-
-        section_header.s_code_addr += section_offset;
-        section_header.s_links_addr += section_offset;
-        section_header.s_exports_addr += section_offset;
-        section_header.s_strings_addr += section_offset;
-        section_header.s_sname_addr += section_offset;
 
         ptr.p_addr = section_offset;
 
