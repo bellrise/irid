@@ -4,10 +4,13 @@
 #pragma once
 
 #include <irid/iof.h>
+#include <stdbool.h>
 #include <stddef.h>
 
 #define LD_VER_MAJOR 0
-#define LD_VER_MINOR 1
+#define LD_VER_MINOR 2
+
+#define INVALID_ADDR ((int) -1)
 
 /* strlist */
 
@@ -24,7 +27,7 @@ void strlist_free(struct strlist *);
 
 enum buffer_type
 {
-    BUFFER_TYPE_REGION,
+    BUFFER_TYPE_MALLOC,
     BUFFER_TYPE_MMAP
 };
 
@@ -35,8 +38,12 @@ struct buffer
     int type;
 };
 
+struct buffer *buffer_new();
+void buffer_resize(struct buffer *, size_t size);
 void buffer_mmap(struct buffer *, const char *path);
+void buffer_write_file(struct buffer *, const char *path);
 void buffer_free_contents(struct buffer *);
+void buffer_free(struct buffer *);
 
 /* options */
 
@@ -44,6 +51,7 @@ struct options
 {
     const char *output;
     struct strlist inputs;
+    bool dump_symbols;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -55,11 +63,16 @@ struct ld_section
 {
     struct ld_section *next;
     struct iof_section header;
+    int file_offset;
     void *base_ptr;
 };
 
 struct ld_section *ld_section_new();
 void ld_section_free(struct ld_section *);
+int ld_section_symbol_reladdr(struct ld_section *, int strid);
+char *ld_section_string_by_id(struct ld_section *, int strid);
+struct iof_string *ld_section_string_record_by_id(struct ld_section *,
+                                                  int strid);
 
 struct ld_object
 {
@@ -74,6 +87,7 @@ struct ld_object *ld_object_new(struct ld_object *parent_or_null);
 void ld_object_from_file(struct ld_object *, const char *path);
 void ld_object_free(struct ld_object *);
 struct ld_section *ld_object_section_new(struct ld_object *);
+void ld_object_dump(struct ld_object *);
 
 /* linker */
 

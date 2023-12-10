@@ -75,22 +75,22 @@ struct iof_symbol
 /* String. */
 struct iof_string
 {
-    u16 s_id;
-    u16 s_addr;
+    u16 s_id;   /* string ID */
+    u16 s_addr; /* char * address in section */
 };
 
 /* Link point in binary code. */
 struct iof_link
 {
     u16 l_strid; /* string ID */
-    u16 l_addr;  /* address in section */
+    u16 l_addr;  /* u16 address in section */
 };
 
 /* Exported symbol. */
 struct iof_export
 {
     u16 e_strid;  /* string ID */
-    u16 e_offset; /* offset in code section */
+    u16 e_offset; /* offset in section */
 };
 
 #endif /* IRID_IOF_H */

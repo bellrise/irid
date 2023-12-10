@@ -3,6 +3,7 @@
 
 #include "ld.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -43,6 +44,7 @@ static void load_section(struct ld_object *self, int ptr)
 
     section = ld_object_section_new(self);
     section->base_ptr = self->file.mem + ptr;
+    section->file_offset = ptr;
     memcpy(&section->header, section->base_ptr, sizeof(section->header));
 }
 
@@ -94,4 +96,58 @@ struct ld_section *ld_object_section_new(struct ld_object *self)
 
     walker->next = section;
     return section;
+}
+
+static void section_dump(struct ld_section *self, int index)
+{
+    printf("\nSection %d:\n", index);
+    printf("  Base address:     0x%04x\n", self->file_offset);
+    printf("  Name address:     0x%04x\n", self->header.s_sname_addr);
+    printf("  Name size:        %d\n", self->header.s_sname_size);
+    printf("  Name:             '%s'\n",
+           (char *) self->base_ptr + self->header.s_sname_addr);
+    printf("  Origin:           0x%04x\n", self->header.s_origin);
+    printf("  Code address:     0x%04x (=0x%04x)\n", self->header.s_code_addr,
+           self->header.s_code_addr + self->file_offset);
+    printf("  Code size:        %d (%.2f kB)\n", self->header.s_code_size,
+           (float) self->header.s_code_size / 1024);
+    printf("  Symbol address:   0x%04x (=0x%04x)\n",
+           self->header.s_symbols_addr,
+           self->header.s_symbols_addr + self->file_offset);
+    printf("  Symbol count:     %d\n", self->header.s_symbols_count);
+    printf("  Links address:    0x%04x (=0x%04x)\n", self->header.s_links_addr,
+           self->header.s_links_addr + self->file_offset);
+    printf("  Links count:      %d\n", self->header.s_links_count);
+    printf("  Exports address:  0x%04x (=0x%04x)\n",
+           self->header.s_exports_addr,
+           self->header.s_exports_addr + self->file_offset);
+    printf("  Exports count:    %d\n", self->header.s_exports_count);
+    printf("  Strings address:  0x%04x (=0x%04x)\n",
+           self->header.s_strings_addr,
+           self->header.s_strings_addr + self->file_offset);
+    printf("  Strings count:    %d\n", self->header.s_strings_count);
+}
+
+void ld_object_dump(struct ld_object *self)
+{
+    struct ld_section *walker;
+    int index = 0;
+
+    printf("IOF header for %s:\n", self->source_path);
+    printf("  Magic:            %hx %hx %hx %hx\n",
+           self->object_header.h_magic[0], self->object_header.h_magic[1],
+           self->object_header.h_magic[2], self->object_header.h_magic[3]);
+    printf("  Format:           %d\n", self->object_header.h_format);
+    printf("  Address width:    %d bits\n",
+           self->object_header.h_addrwidth * 8);
+    printf("  Section count:    %d\n", self->object_header.h_section_count);
+    printf("  Section addr:     0x%04x\n", self->object_header.h_section_addr);
+    printf("  Endianness:       %d (%s)\n", self->object_header.h_endianness,
+           self->object_header.h_endianness == 0 ? "little-endian" : "?");
+
+    walker = self->first_section;
+    while (walker) {
+        section_dump(walker, index++);
+        walker = walker->next;
+    }
 }

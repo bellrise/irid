@@ -20,9 +20,12 @@ int main(int argc, char **argv)
     object = ld_object_new(NULL);
     ld_object_from_file(object, opts.inputs.strings[0]);
 
-    linker.first_object = object;
-
-    ld_linker_link(&linker, opts.output);
+    if (opts.dump_symbols) {
+        ld_object_dump(object);
+    } else {
+        linker.first_object = object;
+        ld_linker_link(&linker, opts.output);
+    }
 
     ld_object_free(object);
     strlist_free(&opts.inputs);
