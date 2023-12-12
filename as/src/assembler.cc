@@ -60,9 +60,10 @@ bytebuffer assembler::as_object()
     bool found_label;
 
     section.set_code(m_code);
-    section.set_name(m_inputname);
+    section.set_name("code");
     section.set_flag(0);
-    section.set_origin(0);
+    if (m_origin != INVALID_ORIGIN)
+        section.set_origin(m_origin);
 
     for (const link_point& link_point : m_link_points)
         section.add_link(link_point.symbol, link_point.offset);
@@ -116,6 +117,7 @@ void assembler::reset_state_variables()
     m_labels.clear();
     m_code.clear();
     m_code.clear();
+    m_origin = INVALID_ORIGIN;
     m_pos = 0;
 }
 
@@ -379,6 +381,11 @@ void assembler::directive_org(source_line& line)
     }
 
     m_pos = addr;
+
+    if (m_origin == INVALID_ORIGIN)
+        m_origin = addr;
+    else if (m_origin > addr)
+        m_origin = addr;
 }
 
 void assembler::directive_string(source_line& line)

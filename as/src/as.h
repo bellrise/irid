@@ -16,6 +16,8 @@
 #define AS_VER_MAJOR 0
 #define AS_VER_MINOR 7
 
+constexpr size_t INVALID_ORIGIN = -1;
+
 struct options
 {
     std::string input;
@@ -136,6 +138,7 @@ class assembler
     std::vector<label> m_labels;
     std::string m_last_label;
     bytebuffer m_code;
+    size_t m_origin;
     size_t m_pos;
 
     void reset_state_variables();
