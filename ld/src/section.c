@@ -33,7 +33,12 @@ int ld_section_symbol_reladdr(struct ld_section *self, int strid)
     return INVALID_ADDR;
 }
 
-char *ld_section_string_by_id(struct ld_section *self, int strid)
+char *ld_section_name(struct ld_section *self)
+{
+    return self->base_ptr + self->header.s_sname_addr;
+}
+
+const char *ld_section_string_by_id(struct ld_section *self, int strid)
 {
     struct iof_string *str;
 
@@ -41,7 +46,7 @@ char *ld_section_string_by_id(struct ld_section *self, int strid)
     if (!str)
         die("failed to find string with strid=%d\n", strid);
 
-    return (char *) self->base_ptr + str->s_addr;
+    return (const char *) self->base_ptr + str->s_addr;
 }
 
 struct iof_string *ld_section_string_record_by_id(struct ld_section *self,

@@ -52,6 +52,7 @@ struct options
     const char *output;
     struct strlist inputs;
     bool dump_symbols;
+    bool verbose;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -70,7 +71,8 @@ struct ld_section
 struct ld_section *ld_section_new();
 void ld_section_free(struct ld_section *);
 int ld_section_symbol_reladdr(struct ld_section *, int strid);
-char *ld_section_string_by_id(struct ld_section *, int strid);
+char *ld_section_name(struct ld_section *);
+const char *ld_section_string_by_id(struct ld_section *, int strid);
 struct iof_string *ld_section_string_record_by_id(struct ld_section *,
                                                   int strid);
 
@@ -88,17 +90,62 @@ void ld_object_from_file(struct ld_object *, const char *path);
 void ld_object_free(struct ld_object *);
 struct ld_section *ld_object_section_new(struct ld_object *);
 void ld_object_dump(struct ld_object *);
+void ld_object_dump_header(struct ld_object *);
 
 /* linker */
+
+struct ld_section_entry
+{
+    struct ld_section *section;
+    struct ld_object *parent;
+    struct ld_region *region;
+};
+
+enum ld_region_type
+{
+    LD_REGION_FREE,
+    LD_REGION_ALLOCATED,
+};
+
+struct ld_region
+{
+    struct ld_region *next;
+    struct ld_region *prev;
+    int type;
+    int start;
+    int size;
+    struct ld_section_entry *section;
+};
+
+struct ld_region *ld_region_new();
+bool ld_region_contains(struct ld_region *, struct ld_region *other);
+int ld_region_insert(struct ld_region *into, struct ld_region *region);
+void ld_region_free(struct ld_region *);
+
+struct ld_symbol
+{
+    char *symbol;
+    int real_addr;
+    struct ld_section_entry *entry;
+};
 
 struct ld_linker
 {
     struct ld_object *first_object;
+    struct ld_section_entry **entries;
+    int n_entries;
+    struct ld_symbol **symbols;
+    int n_symbols;
+    bool verbose;
+    struct ld_region *_region_chain;
+    struct buffer *output;
 };
 
+struct ld_linker *ld_linker_new();
 void ld_linker_add_object_chain(struct ld_linker *,
                                 struct ld_object *object_chain);
 void ld_linker_link(struct ld_linker *, const char *output_path);
+void ld_linker_free(struct ld_linker *);
 
 /* debug/die */
 

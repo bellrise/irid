@@ -98,7 +98,7 @@ struct ld_section *ld_object_section_new(struct ld_object *self)
     return section;
 }
 
-static void section_dump(struct ld_section *self, int index)
+static void section_dump_header(struct ld_section *self, int index)
 {
     printf("\nSection %d:\n", index);
     printf("  Base address:     0x%04x\n", self->file_offset);
@@ -106,6 +106,7 @@ static void section_dump(struct ld_section *self, int index)
     printf("  Name size:        %d\n", self->header.s_sname_size);
     printf("  Name:             '%s'\n",
            (char *) self->base_ptr + self->header.s_sname_addr);
+    printf("  Flags:            %d\n", self->header.s_flag);
     printf("  Origin:           0x%04x\n", self->header.s_origin);
     printf("  Code address:     0x%04x (=0x%04x)\n", self->header.s_code_addr,
            self->header.s_code_addr + self->file_offset);
@@ -128,12 +129,26 @@ static void section_dump(struct ld_section *self, int index)
     printf("  Strings count:    %d\n", self->header.s_strings_count);
 }
 
+static void object_dump_lvl(struct ld_object *self, int level)
+{
+    for (int i = 0; i < level * 2; i++)
+        putc(' ', stdout);
+    printf("%s\n", self->source_path);
+    if (self->next)
+        object_dump_lvl(self->next, level + 1);
+}
+
 void ld_object_dump(struct ld_object *self)
+{
+    object_dump_lvl(self, 0);
+}
+
+void ld_object_dump_header(struct ld_object *self)
 {
     struct ld_section *walker;
     int index = 0;
 
-    printf("IOF header for %s:\n", self->source_path);
+    printf("\nIOF header for %s:\n", self->source_path);
     printf("  Magic:            %hx %hx %hx %hx\n",
            self->object_header.h_magic[0], self->object_header.h_magic[1],
            self->object_header.h_magic[2], self->object_header.h_magic[3]);
@@ -147,7 +162,7 @@ void ld_object_dump(struct ld_object *self)
 
     walker = self->first_section;
     while (walker) {
-        section_dump(walker, index++);
+        section_dump_header(walker, index++);
         walker = walker->next;
     }
 }
