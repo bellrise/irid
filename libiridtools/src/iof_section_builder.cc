@@ -74,6 +74,7 @@ void iof_section_builder::set_code(bytebuffer buf)
 
 void iof_section_builder::set_origin(u16 origin)
 {
+    m_header.s_flag |= IOF_SFLAG_STATIC_ORIGIN;
     m_header.s_origin = origin;
 }
 
