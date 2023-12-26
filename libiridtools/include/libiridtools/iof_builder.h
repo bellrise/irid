@@ -33,6 +33,8 @@ class iof_builder
 class iof_section_builder
 {
   public:
+    iof_section_builder();
+
     /* Returns the built section. */
     bytebuffer build() const;
 
@@ -58,6 +60,7 @@ class iof_section_builder
         { }
     };
 
+    bool m_origin_set;
     iof_section m_header;
     bytebuffer m_code;
     std::string m_name;

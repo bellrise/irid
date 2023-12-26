@@ -38,8 +38,6 @@ static void append_section_entry(struct ld_linker *self,
     entry->parent = parent;
     entry->section = section;
 
-    debug("found section %s:%s", parent->source_path, ld_section_name(section));
-
     self->entries = realloc(self->entries, sizeof(struct ld_section_entry *)
                                                * (self->n_entries + 1));
     self->entries[self->n_entries++] = entry;
@@ -82,8 +80,6 @@ static struct ld_region *find_region_with_addr(struct ld_linker *self, int addr)
 
     region = get_first_region(self);
     while (region) {
-        debug("find %d in region(%d:%d)", addr, region->start,
-              region->start + region->size);
         if (addr >= region->start && addr < (region->start + region->size))
             return region;
         region = region->next;
@@ -344,6 +340,24 @@ static void copy_code_sections(struct ld_linker *self)
     }
 }
 
+static void zero_free_sections(struct ld_linker *self)
+{
+    struct ld_region *region;
+    void *output_buffer;
+
+    /* Write all but the last free section. */
+
+    region = get_first_region(self);
+    while (region->next) {
+        if (region->type == LD_REGION_FREE) {
+            output_buffer = self->output->mem + region->start;
+            memset(output_buffer, 0, region->size);
+        }
+
+        region = region->next;
+    }
+}
+
 void ld_linker_link(struct ld_linker *self, const char *output_path)
 {
     collect_sections(self);
@@ -352,15 +366,18 @@ void ld_linker_link(struct ld_linker *self, const char *output_path)
     /* Map sections into memory regions. */
     place_static_regions(self);
     place_movable_regions(self);
-    dump_regions(self);
 
     for (int i = 0; i < self->n_entries; i++)
         collect_symbols_from_section(self, self->entries[i]);
 
-    dump_symbols(self);
+    if (self->verbose) {
+        dump_regions(self);
+        dump_symbols(self);
+    }
 
     create_output_buffer(self);
     copy_code_sections(self);
+    zero_free_sections(self);
 
     for (int i = 0; i < self->n_entries; i++)
         link_section(self, self->entries[i]);

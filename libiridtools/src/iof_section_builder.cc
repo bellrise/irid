@@ -4,18 +4,33 @@
 #include <libiridtools/iof_builder.h>
 #include <stdexcept>
 
+iof_section_builder::iof_section_builder()
+    : m_origin_set(false)
+{ }
+
 bytebuffer iof_section_builder::build() const
 {
     iof_section header;
     bytebuffer res;
+    size_t code_len;
 
     header = m_header;
     res.append_range(&header, sizeof(header));
 
-    /* Insert code. */
-    header.s_code_addr = res.len();
-    header.s_code_size = m_code.len();
-    res.append_buffer(m_code);
+    /* Remove unnecessary padding before the first origin, if any. */
+
+    if (m_origin_set) {
+        code_len = m_code.len() - header.s_origin;
+        header.s_code_addr = res.len();
+        header.s_code_size = code_len;
+        res.append_range(m_code.get_range(header.s_origin, code_len));
+    }
+
+    else {
+        header.s_code_addr = res.len();
+        header.s_code_size = m_code.len();
+        res.append_buffer(m_code);
+    }
 
     /* Insert symbols. */
     header.s_symbols_addr = res.len();
@@ -76,6 +91,7 @@ void iof_section_builder::set_origin(u16 origin)
 {
     m_header.s_flag |= IOF_SFLAG_STATIC_ORIGIN;
     m_header.s_origin = origin;
+    m_origin_set = true;
 }
 
 void iof_section_builder::set_flag(u16 flags)

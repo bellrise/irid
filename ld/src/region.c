@@ -62,7 +62,18 @@ int ld_region_insert(struct ld_region *into, struct ld_region *region)
     space_before = region->start - into->start;
     space_after = into->size - (space_before + region->size);
 
-    if (space_before) {
+    if (space_before && space_after) {
+        /* Place the region in the middle of this empty one. */
+        insert_after(into, region);
+        into->size = into->size - (region->size + space_after);
+
+        after_region = ld_region_new();
+        after_region->size = space_after;
+        after_region->start = region->start + region->size;
+        insert_after(region, after_region);
+    }
+
+    else if (space_before) {
         /* Place the region after this empty one and shrink it. */
         insert_after(into, region);
         into->size -= region->size;
@@ -73,17 +84,6 @@ int ld_region_insert(struct ld_region *into, struct ld_region *region)
         insert_before(into, region);
         into->size -= region->size;
         into->start += region->size;
-    }
-
-    else if (space_before && space_after) {
-        /* Place the region in the middle of this empty one. */
-        insert_after(into, region);
-        into->size -= region->size - space_after;
-
-        after_region = ld_region_new();
-        after_region->size = space_after;
-        after_region->start = region->start + region->size;
-        insert_after(region, after_region);
     }
 
     else {

@@ -16,7 +16,7 @@ void opt_set_defaults(struct options *opts)
     opts->inputs.strings = NULL;
     opts->inputs.size = 0;
     opts->dump_symbols = false;
-    opts->verbose = true;
+    opts->verbose = false;
 }
 
 void opt_parse(struct options *opts, int argc, char **argv)
