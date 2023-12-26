@@ -18,7 +18,8 @@ OUT := build/$(BIN)
 BT  ?= debug
 
 ifeq ($(BT), debug)
-	CFLAGS += -O0 -ggdb -DDEBUG=1 -fsanitize=address
+	CFLAGS += -O0 -ggdb -DDEBUG=1
+	LDFLAGS += -fsanitize=address
 else ifeq ($(BT), release)
 	CFLAGS += -O3
 else
@@ -46,7 +47,7 @@ test:
 compile_flags.txt:
 	echo $(CFLAGS) -xc++ | tr ' ' '\n' > compile_flags.txt
 
-$(OUT): $(OBJ)
+$(OUT): $(OBJ) $(LIB)
 	@echo "  LD $@"
 	@$(CXX) -o $@ $(CFLAGS) $(LDFLAGS) $^ $(LIB)
 
@@ -54,6 +55,8 @@ build/%.o: src/%.cc $(DEP)
 	@echo "  CXX $<"
 	@$(CXX) -c -o $@ $(CFLAGS) $<
 
+../libiridtools/build/libiridtools.a:
+	@make -C ../libiridtools
 
 .PHONY: compile_flags.txt
 .SILENT: build clean install test

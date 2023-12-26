@@ -47,7 +47,7 @@ compile_flags.txt:
 
 $(OUT): $(OBJ)
 	@echo "  AR $@"
-	@ar r $(OUT) $(OBJ)
+	@ar r $(OUT) $(OBJ) 2>/dev/null
 
 build/%.o: src/%.cc $(DEP)
 	@echo "  CXX $<"

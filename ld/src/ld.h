@@ -150,9 +150,10 @@ void ld_linker_free(struct ld_linker *);
 /* debug/die */
 
 #if defined DEBUG
-void debug(const char *fmt, ...);
+# define debug(...) debug_impl(__VA_ARGS__)
 #else
 # define debug(...)
 #endif
 
+void debug_impl(const char *fmt, ...);
 void die(const char *fmt, ...);

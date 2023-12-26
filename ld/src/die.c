@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void debug(const char *fmt, ...)
+void debug_impl(const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
