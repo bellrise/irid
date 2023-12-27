@@ -27,12 +27,23 @@ int main(int argc, char **argv)
         ld_object_from_file(object, opts.inputs.strings[i]);
     }
 
-    /* Dump symbols */
+    /* Dump */
 
     if (opts.dump_symbols) {
         object = first_object;
         while (object) {
-            ld_object_dump_header(object);
+            opts.portable ? ld_object_dump_symbols_p(object, opts.only_exported)
+                          : ld_object_dump_symbols(object, opts.only_exported);
+            object = object->next;
+        }
+        goto end;
+    }
+
+    if (opts.dump_header) {
+        object = first_object;
+        while (object) {
+            opts.portable ? ld_object_dump_header_p(object)
+                          : ld_object_dump_header(object);
             object = object->next;
         }
         goto end;

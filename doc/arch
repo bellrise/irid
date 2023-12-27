@@ -225,3 +225,7 @@ All parameters are passed in the general registers, starting from r0.
 0x21
     | r1: device ID
     Read a byte to h2 from the device defined in r1.
+
+0x22
+    | r1: device ID
+    Poll a device if it has any data to read, and return a bool value in h2.

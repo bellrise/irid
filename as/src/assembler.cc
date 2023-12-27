@@ -152,6 +152,7 @@ void assembler::register_instruction_methods()
     m_instructions.push_back(named_method("cml", &assembler::ins_dest_and_any));
     m_instructions.push_back(named_method("and", &assembler::ins_dest_and_any));
     m_instructions.push_back(named_method("or", &assembler::ins_dest_and_any));
+    m_instructions.push_back(named_method("mul", &assembler::ins_dest_and_any));
 
     /* rx */
     m_instructions.push_back(named_method("push", &assembler::ins_register));
@@ -310,7 +311,7 @@ void assembler::parse_label(source_line& line)
         }
 
         append_nonlocal_label = true;
-    } else if (!isalpha(label_str[0])) {
+    } else if (!is_valid_start_symbol_char(label_str[0])) {
         error(line, error_offset,
               "invalid label, first char has to fulfill A-z");
     }
@@ -798,7 +799,7 @@ void assembler::ins_load_and_store(source_line& line, byte r_instruction,
     }
 
     if (is_valid_symbol(addr_str)) {
-        addr = resolve_address_or_link(line, addr_str, m_pos + 1,
+        addr = resolve_address_or_link(line, addr_str, m_pos + 2,
                                        line.part_offsets[2]);
     } else {
         addr = parse_int(addr_str, line, line.part_offsets[1]);
@@ -1013,7 +1014,7 @@ byte assembler::instruction_id_from_mnemonic(const std::string& mnemonic)
         {"push", I_PUSH},       {"pop", I_POP},   {"load", I_LOAD},
         {"store", I_STORE},     {"cmg", I_CMG},   {"cml", I_CML},
         {"cmp", I_CMP},         {"and", I_AND},   {"or", I_OR},
-        {"shr", I_SHR},         {"shl", I_SHL}};
+        {"shr", I_SHR},         {"shl", I_SHL},   {"mul", I_MUL}};
     static const size_t map_size =
         sizeof(mnemonic_map) / sizeof(std::pair<std::string, int>);
 

@@ -52,6 +52,9 @@ struct options
     const char *output;
     struct strlist inputs;
     bool dump_symbols;
+    bool only_exported;
+    bool dump_header;
+    bool portable;
     bool verbose;
 };
 
@@ -71,7 +74,7 @@ struct ld_section
 struct ld_section *ld_section_new();
 void ld_section_free(struct ld_section *);
 int ld_section_symbol_reladdr(struct ld_section *, int strid);
-char *ld_section_name(struct ld_section *);
+const char *ld_section_name(struct ld_section *);
 const char *ld_section_string_by_id(struct ld_section *, int strid);
 struct iof_string *ld_section_string_record_by_id(struct ld_section *,
                                                   int strid);
@@ -89,8 +92,10 @@ struct ld_object *ld_object_new(struct ld_object *parent_or_null);
 void ld_object_from_file(struct ld_object *, const char *path);
 void ld_object_free(struct ld_object *);
 struct ld_section *ld_object_section_new(struct ld_object *);
-void ld_object_dump(struct ld_object *);
 void ld_object_dump_header(struct ld_object *);
+void ld_object_dump_symbols(struct ld_object *, bool only_exports);
+void ld_object_dump_header_p(struct ld_object *);
+void ld_object_dump_symbols_p(struct ld_object *, bool only_exports);
 
 /* linker */
 

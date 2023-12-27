@@ -129,18 +129,77 @@ static void section_dump_header(struct ld_section *self, int index)
     printf("  Strings count:    %d\n", self->header.s_strings_count);
 }
 
-static void object_dump_lvl(struct ld_object *self, int level)
+static void section_dump_header_p(struct ld_section *self, int index)
 {
-    for (int i = 0; i < level * 2; i++)
-        putc(' ', stdout);
-    printf("%s\n", self->source_path);
-    if (self->next)
-        object_dump_lvl(self->next, level + 1);
+    printf("SECTION: %d\n", index);
+    printf("base_addr: %d\n", self->file_offset);
+    printf("name_addr: %d\n", self->header.s_sname_addr);
+    printf("name_size: %d\n", self->header.s_sname_size);
+    printf("name: %s\n", (char *) self->base_ptr + self->header.s_sname_addr);
+    printf("flags: %d\n", self->header.s_flag);
+    printf("origin: %d\n", self->header.s_origin);
+    printf("code_addr: %d\n", self->header.s_code_addr);
+    printf("code_size: %d\n", self->header.s_code_size);
+    printf("symbols_addr: %d\n", self->header.s_symbols_addr);
+    printf("symbols_count: %d\n", self->header.s_symbols_count);
+    printf("links_addr: %d\n", self->header.s_links_addr);
+    printf("links_count: %d\n", self->header.s_links_count);
+    printf("exports_addr: %d\n", self->header.s_exports_addr);
+    printf("exports_count: %d\n", self->header.s_exports_count);
+    printf("strings_addr: %d\n", self->header.s_strings_addr);
+    printf("strings_count: %d\n", self->header.s_strings_count);
 }
 
-void ld_object_dump(struct ld_object *self)
+static bool is_exported_symbol(struct ld_section *self, int strid)
 {
-    object_dump_lvl(self, 0);
+    struct iof_export *exportv;
+
+    exportv = self->base_ptr + self->header.s_exports_addr;
+
+    for (int i = 0; i < self->header.s_exports_count; i++) {
+        if (exportv[i].e_strid == strid)
+            return true;
+    }
+
+    return false;
+}
+
+static void section_dump_symbols(struct ld_section *self, bool only_exports)
+{
+    struct iof_symbol *symv;
+    bool is_exported;
+
+    symv = self->base_ptr + self->header.s_symbols_addr;
+
+    for (int i = 0; i < self->header.s_symbols_count; i++) {
+        is_exported = is_exported_symbol(self, symv[i].l_strid);
+
+        if (only_exports && !is_exported)
+            continue;
+
+        printf("  0x%04x  %8s  %s  %s\n", symv[i].l_addr, ld_section_name(self),
+               is_exported ? "EXPORT" : "LOCAL ",
+               ld_section_string_by_id(self, symv[i].l_strid));
+    }
+}
+
+static void section_dump_symbols_p(struct ld_section *self, bool only_exports)
+{
+    struct iof_symbol *symv;
+    bool is_exported;
+
+    symv = self->base_ptr + self->header.s_symbols_addr;
+
+    for (int i = 0; i < self->header.s_symbols_count; i++) {
+        is_exported = is_exported_symbol(self, symv[i].l_strid);
+
+        if (only_exports && !is_exported)
+            continue;
+
+        printf("%d %s %c %s\n", symv[i].l_addr, ld_section_name(self),
+               is_exported ? 'X' : 'L',
+               ld_section_string_by_id(self, symv[i].l_strid));
+    }
 }
 
 void ld_object_dump_header(struct ld_object *self)
@@ -163,6 +222,53 @@ void ld_object_dump_header(struct ld_object *self)
     walker = self->first_section;
     while (walker) {
         section_dump_header(walker, index++);
+        walker = walker->next;
+    }
+}
+
+void ld_object_dump_symbols(struct ld_object *self, bool only_exports)
+{
+    struct ld_section *walker;
+
+    printf("Symbols for %s:\n", self->source_path);
+    printf("  ADDR        SECT  TYPE    SYMBOL\n");
+
+    walker = self->first_section;
+    while (walker) {
+        section_dump_symbols(walker, only_exports);
+        walker = walker->next;
+    }
+}
+
+void ld_object_dump_header_p(struct ld_object *self)
+{
+    struct ld_section *walker;
+    int index = 0;
+
+    printf("magic: %hx %hx %hx %hx\n", self->object_header.h_magic[0],
+           self->object_header.h_magic[1], self->object_header.h_magic[2],
+           self->object_header.h_magic[3]);
+    printf("format: %d\n", self->object_header.h_format);
+    printf("addr_width_bits: %d\n", self->object_header.h_addrwidth * 8);
+    printf("section_count: %d\n", self->object_header.h_section_count);
+    printf("section_addr: %d\n", self->object_header.h_section_addr);
+    printf("endianness: %s\n",
+           self->object_header.h_endianness == 0 ? "little-endian" : "?");
+
+    walker = self->first_section;
+    while (walker) {
+        section_dump_header_p(walker, index++);
+        walker = walker->next;
+    }
+}
+
+void ld_object_dump_symbols_p(struct ld_object *self, bool only_exports)
+{
+    struct ld_section *walker;
+
+    walker = self->first_section;
+    while (walker) {
+        section_dump_symbols_p(walker, only_exports);
         walker = walker->next;
     }
 }

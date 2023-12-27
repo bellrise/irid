@@ -33,7 +33,7 @@ int ld_section_symbol_reladdr(struct ld_section *self, int strid)
     return INVALID_ADDR;
 }
 
-char *ld_section_name(struct ld_section *self)
+const char *ld_section_name(struct ld_section *self)
 {
     return self->base_ptr + self->header.s_sname_addr;
 }
