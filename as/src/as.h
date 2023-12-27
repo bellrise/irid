@@ -141,6 +141,8 @@ class assembler
     size_t m_origin;
     size_t m_pos;
 
+    void assemble_only_values();
+
     void reset_state_variables();
     void register_directive_methods();
     void register_instruction_methods();
@@ -164,6 +166,7 @@ class assembler
     void directive_byte(source_line&);
     void directive_resv(source_line&);
     void directive_value(source_line&);
+    void directive_valuefile(source_line&);
     void directive_export(source_line&);
     void directive_decl(source_line&);
 
@@ -232,4 +235,5 @@ class assembler
     static int replace_char_and_count(std::string& str, char from, char to);
 };
 
+std::string read_file_to_string(const std::string& path);
 void die(const char *fmt, ...);

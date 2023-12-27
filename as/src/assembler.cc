@@ -53,6 +53,27 @@ bool assembler::assemble()
     return false;
 }
 
+void assembler::assemble_only_values()
+{
+    std::vector<std::string> source_lines;
+    source_line line;
+
+    source_lines = split_lines(m_source);
+    for (std::string& line : source_lines)
+        line = rstrip_string(remove_comments(line));
+
+    for (size_t i = 0; i < source_lines.size(); i++) {
+        if (source_lines[i].empty())
+            continue;
+
+        /* There are 3 types of lines: labels, directives & instructions. */
+
+        line = source_line(source_lines[i], i + 1);
+        if (lstrip_string(line.str).starts_with('.'))
+            parse_directive(line);
+    }
+}
+
 bytebuffer assembler::as_object()
 {
     iof_builder builder;
@@ -129,6 +150,8 @@ void assembler::register_directive_methods()
     m_directives.push_back(named_method("byte", &assembler::directive_byte));
     m_directives.push_back(named_method("resv", &assembler::directive_resv));
     m_directives.push_back(named_method("value", &assembler::directive_value));
+    m_directives.push_back(
+        named_method("valuefile", &assembler::directive_valuefile));
     m_directives.push_back(
         named_method("export", &assembler::directive_export));
 }
@@ -457,6 +480,23 @@ void assembler::directive_value(source_line& line)
 
     value = parse_int(line.parts[2], line, line.part_offsets[2]);
     m_values.push_back({name, value});
+}
+
+void assembler::directive_valuefile(source_line& line)
+{
+    std::string path;
+
+    if (line.parts.size() < 2)
+        error(line, line.str.size(), "expected a path");
+    if (line.parts.size() > 2)
+        error(line, line.part_offsets[1], "too many arguments");
+
+    path = parse_string(line.parts[1], line, line.part_offsets[1]);
+    assembler value_asm(path, read_file_to_string(path));
+    value_asm.assemble_only_values();
+
+    for (named_value& val : value_asm.m_values)
+        m_values.push_back(val);
 }
 
 void assembler::directive_export(source_line& line)

@@ -6,7 +6,6 @@
 #include <fstream>
 #include <sstream>
 
-static std::string read_input(const std::string& path);
 static void write_to_output(const bytebuffer& result, const std::string& path);
 
 int main(int argc, char **argv)
@@ -16,7 +15,7 @@ int main(int argc, char **argv)
     opt_set_defaults(opts);
     opt_parse(opts, argc, argv);
 
-    assembler as(opts.input, read_input(opts.input));
+    assembler as(opts.input, read_file_to_string(opts.input));
 
     opt_set_warnings_for_as(as, opts);
 
@@ -26,7 +25,7 @@ int main(int argc, char **argv)
                     opts.output);
 }
 
-std::string read_input(const std::string& path)
+std::string read_file_to_string(const std::string& path)
 {
     std::string content;
     char stdin_buffer[512];
