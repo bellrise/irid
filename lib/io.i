@@ -8,9 +8,7 @@
 .export io_sel
 .export io_devd
 
-.value CPUCALL_DEVICEWRITE 0x20
-.value CPUCALL_DEVICEREAD  0x21
-.value CPUCALL_DEVICEPOLL  0x22
+.valuefile "arch.i"
 
 
 ; Write a character to the selected I/O device.
