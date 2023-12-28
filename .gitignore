@@ -1,7 +1,7 @@
 emul/build
 as/build
 libiridtools/build
-lib/build
+sys/build
 *.bin
 *.out
 *.iof

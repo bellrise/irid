@@ -1,12 +1,13 @@
 ; io.i
 ; Library for input/output routines.
+; Copyright (c) 2023 bellrise
 
 .export putc
 .export puts
 .export putx
 .export getc
-.export io_sel
-.export io_devd
+.export printf
+.export iosel
 
 .valuefile "arch.i"
 
@@ -38,9 +39,6 @@ puts:
     jmp @loop
 
 @end:
-    mov r0, '\n'
-    call putc
-
     pop r4
     pop bp
     ret
@@ -105,60 +103,67 @@ getc:
     pop bp
     ret
 
-; Select the I/O device to use.
-; io_sel(int dev)
-io_sel:
-    store r0, __io_dev
-    ret
-
-; Dump all connected devices.
-; io_devd()
-io_devd:
-    push sp
+; Print a formatted string.
+; printf(char *fmt, ...)
+printf:
     push bp
     push r4
     push r5
     mov bp, sp
 
-    sub sp, 64      ; device_ids = alloca u16[32]
-    sub sp, 16      ; deviceinfo = alloca struct deviceinfo
-
-    mov r0, 0x13    ; query device IDs
-    mov r1, bp
-    sub r1, 64      ; &device_ids
-    mov r2, 32      ; device_ids count
-    cpucall
-
-    mov r4, r2      ; amount of devices
-    mov r5, 0       ; index
+    mov r4, r0      ; char *fmt
+    mov r5, bp      ; &...
+    add r5, 8
 
 @loop:
-    cmp r5, r4      ; if index == n devices
+    load h0, r4     ; load char
+    cmp h0, 0       ; check for end of string
     jeq @end
 
-    mov r3, r5
-    mul r3, 2       ; offset into device ID array
-    mov r0, bp
-    sub r0, 64      ; &device_ids
-    add r3, r0      ; &device_ids[index]
+    cmp h0, '%'     ; compare char
+    jeq @format
 
-    load r0, r3
-    call putx       ; print device ID
-    mov r0, ':'
+    call putc       ; print non-formatted char
+    add r4, 1       ; increment fmt pointer
+    jmp @loop
+
+@format:
+    add r4, 1       ; move to next char
+    load h0, r4     ; load char
+
+    cmp h0, '%'     ; regular percent
+    jeq @LF0
+    cmp h0, 'x'     ; hex number
+    jeq @LFx
+    cmp h0, 's'     ; string
+    jeq @LFs
+
+    push r0         ; print unknown %_ otherwise
+    mov r0, '%'
     call putc
+    pop r0
+    call putc
+    jmp @LFend
 
-    mov r0, 0x14    ; query device info
-    load r1, r3     ; device ID
-    mov r2, bp
-    sub r2, 80      ; &deviceinfo
-    cpucall
+@LF0:
+    mov h0, '%'
+    call putc
+    jmp @LFend
 
-    mov r0, bp
-    sub r0, 80      ; &deviceinfo
-    add r0, 2       ; &deviceinfo->d_name
+@LFx:
+    load r0, r5     ; get argument from stack
+    add r5, 2       ; move to next arg
+    call putx
+    jmp @LFend
+
+@LFs:
+    load r0, r5     ; char * from stack
+    add r5, 2       ; move to next arg
     call puts
+    jmp @LFend
 
-    add r5, 1
+@LFend:
+    add r4, 1       ; move to next char
     jmp @loop
 
 @end:
@@ -166,7 +171,12 @@ io_devd:
     pop r5
     pop r4
     pop bp
-    pop sp
+    ret
+
+; Select the I/O device to use.
+; iosel(int dev)
+iosel:
+    store r0, __io_dev
     ret
 
 __io_dev:
