@@ -1,0 +1,49 @@
+file:
+    | ( statement )+
+
+statement:
+    | var-decl ';'
+    | func-decl ';'
+    | type-decl
+    | func-def
+
+type-decl:
+    | 'type' symbol '{' type-body '}'
+
+func-decl:
+    | 'func' symbol '(' [ func-params ] ')' [ '->' type ]
+
+func-def:
+    | 'func' symbol '(' [ func-params ] ')' [ '->' type ] '{' func-body '}'
+
+type:
+    | symbol [ '&' ]
+
+type-body:
+    | ( type symbol ';' )*
+
+func-body:
+    | ( ( var-decl | expr | if-else ) ';' )*
+
+var-decl:
+    | 'let' type symbol
+
+expr:
+    | '(' expr ')'
+    | expr ( '+' | '-' | '*' | '/' | '%' ) expr
+    | expr ( '==' | '!=' ) expr
+    | expr '(' [ expr [ ',' expr ]* ] ')'
+    | expr '=' expr
+    | symbol
+    | literal
+
+if-else:
+    | 'if' '(' expr ')' '{' func-body '}' [ 'else' '{ func-body '}' ]
+
+literal:
+    | NUMBER
+    | "'" CHARACTER "'"
+    | '"' ( CHARACTER )* '"'
+
+symbol:
+    | ( CHARACTER )+
