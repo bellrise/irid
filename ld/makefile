@@ -41,9 +41,6 @@ install:
 	echo "  CP $(OUT) $(PREFIX)/bin/$(BIN)"
 	cp $(OUT) $(PREFIX)/bin/$(BIN)
 
-test:
-	./runtests.sh
-
 compile_flags.txt:
 	echo $(CFLAGS) -xc | tr ' ' '\n' > compile_flags.txt
 
@@ -57,4 +54,4 @@ build/%.o: src/%.c $(DEP)
 
 
 .PHONY: compile_flags.txt
-.SILENT: build clean install test
+.SILENT: build clean install
