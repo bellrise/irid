@@ -188,7 +188,7 @@ static struct type *parse_type(struct parser *self)
         pef(self, tok, "int", "expected type name");
 
     type_name = string_copy(tok->pos, tok->len);
-    type = type_register_resolve(&self->types, type_name);
+    type = type_register_resolve(self->types, type_name);
 
     if (!type)
         pe(self, tok, "unknown type `%s`", type_name);
@@ -196,7 +196,7 @@ static struct type *parse_type(struct parser *self)
     tok = tokpeek(self);
     if (tok->type == TOK_AMPERSAND) {
         /* Wrap the type in a pointer type. */
-        pointer_type = type_register_add_pointer(&self->types, type);
+        pointer_type = type_register_add_pointer(self->types, type);
         type = (struct type *) pointer_type;
         toknext(self);
     }
@@ -366,6 +366,7 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
     struct node *left_expr;
     struct node *right_expr;
     struct tok *tok;
+    int node_type;
     char *tmpstr;
 
     tok = tokcur(self);
@@ -423,8 +424,10 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
          */
 
         expr = node_alloc(NULL, NODE_ASSIGN);
-        node_add_child(expr, left_expr);
+
         right_expr = parse_expr_inside(self, expr);
+
+        node_add_child(expr, left_expr);
         node_add_child(expr, right_expr);
 
         return expr;
@@ -446,6 +449,44 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
         expr = node_alloc(NULL, NODE_CALL);
         node_add_child(expr, left_expr);
         parse_call_args(self, expr);
+
+        return expr;
+    }
+
+    /* expr ( '+' | '-' | '*' | '/' | '%' | '==' | '!=' ) expr */
+
+    node_type = NODE_NULL;
+
+    if (tok->type == TOK_PLUS)
+        node_type = NODE_ADD;
+    if (tok->type == TOK_MINUS)
+        node_type = NODE_SUB;
+    if (tok->type == TOK_STAR)
+        node_type = NODE_MUL;
+    if (tok->type == TOK_SLASH)
+        node_type = NODE_DIV;
+    if (tok->type == TOK_PERCENT)
+        node_type = NODE_MOD;
+    if (tok->type == TOK_CMPEQ)
+        node_type = NODE_CMPEQ;
+    if (tok->type == TOK_CMPNEQ)
+        node_type = NODE_CMPNEQ;
+
+    if (node_type != NODE_NULL) {
+        tok = toknext(self);
+        tok = toknext(self);
+
+        /* node_add/sub/mul/div/mod:
+            - left_expr
+            - right_expr
+         */
+
+        expr = node_alloc(NULL, node_type);
+
+        right_expr = parse_expr_inside(self, expr);
+
+        node_add_child(expr, left_expr);
+        node_add_child(expr, right_expr);
 
         return expr;
     }
@@ -479,7 +520,6 @@ static void parse_func_body(struct parser *self, struct node_func_def *func_def)
         /* After each statement, the language requires a semicolon. */
 
         tok = toknext(self);
-        debug("> %s", tok_typename(tok->type));
         if (tok->type == TOK_RBRACE)
             break;
 
@@ -520,8 +560,9 @@ void parser_parse(struct parser *self)
 
     self->tree = node_alloc(NULL, NODE_FILE);
     self->sel_tok = 0;
+    self->types = ac_alloc(global_ac, sizeof(struct type_register));
 
-    type_register_add_builtin(&self->types);
+    type_register_add_builtin(self->types);
 
     while (1) {
         tok = tokcur(self);
@@ -540,7 +581,7 @@ void parser_parse(struct parser *self)
         self->sel_tok++;
     }
 
-    for (int i = 0; i < self->types.n_types; i++)
-        type_dump(self->types.types[i]);
+    for (int i = 0; i < self->types->n_types; i++)
+        type_dump(self->types->types[i]);
     node_tree_dump(self->tree);
 }

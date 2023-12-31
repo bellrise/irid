@@ -33,7 +33,7 @@ const char *tok_typename(int type)
         "COLON",     "LBRACE",  "RBRACE", "LPAREN", "RPAREN",  "LBRACKET",
         "RBRACKET",  "ARROW",   "PLUS",   "MINUS",  "STAR",    "SLASH",
         "EQ",        "CMPEQ",   "CMPNEQ", "NOT",    "DOT",     "COMMA",
-        "AMPERSAND", "QUOTE"};
+        "AMPERSAND", "QUOTE",   "PERCENT"};
 
     return toknames[type];
 }
@@ -199,6 +199,9 @@ void tokens_tokenize(struct tokens *self)
             break;
         case '\'':
             tnew(self, TOK_QUOTE, p, 1);
+            break;
+        case '%':
+            tnew(self, TOK_PERCENT, p, 1);
             break;
         }
 

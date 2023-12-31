@@ -9,7 +9,6 @@
 void *node_alloc(struct node *parent, int type)
 {
     struct node *node;
-    struct node *walker;
     size_t alloc_size;
 
     switch (type) {
@@ -46,28 +45,24 @@ void node_add_child(struct node *parent, struct node *child)
 {
     struct node *walker;
 
-    if (parent) {
-        /* Walk the child list. */
-        if (parent->child) {
-            walker = parent->child;
-            while (walker->next)
-                walker = walker->next;
-            walker->next = child;
-        }
-
-        /* First child of parent. */
-        else {
-            parent->child = child;
-        }
+    if (!parent->child) {
+        parent->child = child;
+        return;
     }
+
+    walker = parent->child;
+    while (walker->next)
+        walker = walker->next;
+
+    walker->next = child;
 }
 
 const char *node_name(struct node *node)
 {
-    const char *names[] = {"FILE",     "FUNC_DECL", "FUNC_DEF", "TYPE_DECL",
-                           "VAR_DECL", "ASSIGN",    "ADD",      "SUB",
-                           "MUL",      "DIV",       "MOD",      "CMPEQ",
-                           "CMPNEQ",   "CALL",      "VALUE",    "LITERAL"};
+    const char *names[] = {
+        "NULL",   "FILE",   "FUNC_DECL", "FUNC_DEF", "TYPE_DECL", "VAR_DECL",
+        "ASSIGN", "ADD",    "SUB",       "MUL",      "DIV",       "MOD",
+        "CMPEQ",  "CMPNEQ", "CALL",      "VALUE",    "LITERAL"};
     return names[node->type];
 }
 
@@ -115,7 +110,6 @@ static void literal_info(struct node_literal *self)
 
 static void node_tree_dump_level(struct node *node, int level)
 {
-    struct node *walker;
     for (int i = 0; i < level; i++)
         fputs("  ", stdout);
 
@@ -141,11 +135,11 @@ static void node_tree_dump_level(struct node *node, int level)
 
     fputc('\n', stdout);
 
-    walker = node->child;
-    while (walker) {
-        node_tree_dump_level(walker, level + 1);
-        walker = walker->next;
-    }
+    if (node->child)
+        node_tree_dump_level(node->child, level + 1);
+
+    if (node->next)
+        node_tree_dump_level(node->next, level);
 }
 
 void node_tree_dump(struct node *node)

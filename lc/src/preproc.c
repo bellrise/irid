@@ -46,7 +46,7 @@ char *preproc_replace_tabs(char *source)
     /* Re-allocate with more space for spaces, and copy it over. */
 
     buffer_size = source_len + tab_count * 3;
-    new_buffer = malloc(buffer_size + 16);
+    new_buffer = calloc(1, buffer_size + 16);
     write_index = 0;
 
     for (size_t i = 0; i < source_len; i++) {

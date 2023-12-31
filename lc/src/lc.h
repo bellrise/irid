@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #define LC_VER_MAJ 0
 #define LC_VER_MIN 1
@@ -70,6 +71,7 @@ enum tok_type
     TOK_COMMA,     /* , */
     TOK_AMPERSAND, /* & */
     TOK_QUOTE,     /* ' */
+    TOK_PERCENT,   /* % */
 };
 
 struct tok
@@ -167,6 +169,7 @@ void allocator_free_all(struct allocator *);
 
 enum node_type
 {
+    NODE_NULL,
     NODE_FILE,
     NODE_FUNC_DECL,
     NODE_FUNC_DEF,
@@ -249,11 +252,64 @@ struct parser
     struct tokens *tokens;
     struct node *tree;
     int sel_tok;
-    struct type_register types;
+    struct type_register *types;
 };
 
 struct parser *parser_new();
 void parser_parse(struct parser *);
+
+/* -- block.c -- */
+
+enum block_type
+{
+    BLOCK_NULL,
+    BLOCK_FILE,
+    BLOCK_FUNC,
+    BLOCK_FUNC_PREAMBLE,
+    BLOCK_FUNC_EPILOGUE,
+};
+
+struct block
+{
+    struct block *next;
+    struct block *child;
+    struct block *parent;
+    int type;
+};
+
+struct block_func
+{
+    struct block head;
+    bool exported;
+    char *label;
+};
+
+void *block_alloc(struct block *parent, int type);
+void block_add_child(struct block *any_block, struct block *child);
+void block_add_next(struct block *parent, struct block *next);
+const char *block_name(struct block *);
+void block_tree_dump(struct block *);
+
+/* -- compiler.c -- */
+
+struct compiler
+{
+    struct node *tree;
+    struct type_register *types;
+    struct block *file_block;
+};
+
+void compiler_compile(struct compiler *);
+
+/* -- emit.c -- */
+
+struct emitter
+{
+    FILE *out;
+    struct block *file_block;
+};
+
+void emitter_emit(struct emitter *, const char *path);
 
 /* utils */
 

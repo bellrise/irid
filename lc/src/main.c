@@ -11,6 +11,8 @@ struct allocator *global_ac;
 int main(int argc, char **argv)
 {
     struct allocator main_allocator;
+    struct compiler compiler;
+    struct emitter emitter;
     struct tokens *tokens;
     struct parser *parser;
     struct options opts;
@@ -36,6 +38,15 @@ int main(int argc, char **argv)
     parser->tokens = tokens;
     parser_parse(parser);
 
+    compiler.types = parser->types;
+    compiler.tree = parser->tree;
+    compiler.file_block = NULL;
+    compiler_compile(&compiler);
+
+    emitter.file_block = compiler.file_block;
+    emitter_emit(&emitter, opts.output);
+
+    fclose(emitter.out);
     allocator_free_all(global_ac);
 
     free(source);
