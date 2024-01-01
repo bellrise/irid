@@ -158,22 +158,15 @@ a public subroutine that may interact with other code you don't know about,
 it is good practice to place a preamble and an epilogue at each end.
 
     ; Preamble
-    push sp
     push bp
-    push r4
-    push r5
-    push r6
-    push r7
+    mov bp, sp
 
     ; ... code ...
 
     ; Epilogue
-    pop r7
-    pop r6
-    pop r5
-    pop r4
+    mov sp, bp
     pop bp
-    pop sp
+    ret
 
 These operations can be made nicer with macros. Each of these registers is two
 bytes wide, so the total amount of "preamble" data is 10 bytes. When reading
