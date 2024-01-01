@@ -1,5 +1,5 @@
 /* Irid Object Format declaration header.
-   Copyright (C) 2023 bellrise */
+   Copyright (C) 2023-2024 bellrise */
 
 #ifndef IRID_IOF_H
 #define IRID_IOF_H

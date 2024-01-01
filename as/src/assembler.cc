@@ -1,5 +1,5 @@
 /* Irid assembler
-  Copyright (c) 2023 bellrise */
+  Copyright (c) 2023-2024 bellrise */
 
 #include "as.h"
 

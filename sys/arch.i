@@ -1,5 +1,5 @@
 ; Irid architecture macro values, possibly useful in programs.
-; Copyright (c) 2023 bellrise
+; Copyright (c) 2023-2024 bellrise
 
 ; Functions built-into the CPU itself.
 

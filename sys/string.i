@@ -1,6 +1,6 @@
 ; string.i
 ; Library for string operations.
-; Copyright (c) 2023 bellrise
+; Copyright (c) 2023-2024 bellrise
 
 .export strlen
 .export strcmp

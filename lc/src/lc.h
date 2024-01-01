@@ -1,5 +1,5 @@
 /* Leaf compiler
-   Copyright (c) 2023 bellrise */
+   Copyright (c) 2023-2024 bellrise */
 
 #ifndef LC_H
 #define LC_H

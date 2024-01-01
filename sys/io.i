@@ -1,6 +1,6 @@
 ; io.i
 ; Library for input/output routines.
-; Copyright (c) 2023 bellrise
+; Copyright (c) 2023-2024 bellrise
 
 .export putc
 .export puts

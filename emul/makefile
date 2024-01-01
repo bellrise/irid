@@ -1,5 +1,5 @@
 # irid-emul build rules
-# Copyright (c) 2023 mini-rose
+# Copyright (c) 2023-2024 mini-rose, bellrise
 
 CXX ?= clang++
 

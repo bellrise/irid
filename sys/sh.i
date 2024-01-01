@@ -1,6 +1,6 @@
 ; sh.i
 ; System shell app.
-; Copyright (c) 2023 bellrise
+; Copyright (c) 2023-2024 bellrise
 
 .export sh
 

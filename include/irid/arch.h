@@ -1,5 +1,5 @@
 /* Irid architecture instruction set.
-   Copyright (C) 2021-2023 bellrise */
+   Copyright (C) 2021-2024 bellrise */
 
 #ifndef IRID_ARCH_H
 #define IRID_ARCH_H

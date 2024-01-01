@@ -1,6 +1,6 @@
 ; mem.i
 ; Library for in-memory operations.
-; Copyright (c) 2023 bellrise
+; Copyright (c) 2023-2024 bellrise
 
 .export bzero
 

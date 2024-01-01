@@ -1,5 +1,5 @@
 /* Common info/error/warn utilities.
-   Copyright (C) 2021-2023 bellrise */
+   Copyright (C) 2021-2024 bellrise */
 
 #include "emul.h"
 
