@@ -21,8 +21,8 @@ void *node_alloc(struct node *parent, int type)
     case NODE_VAR_DECL:
         alloc_size = sizeof(struct node_var_decl);
         break;
-    case NODE_VALUE:
-        alloc_size = sizeof(struct node_value);
+    case NODE_LABEL:
+        alloc_size = sizeof(struct node_label);
         break;
     case NODE_LITERAL:
         alloc_size = sizeof(struct node_literal);
@@ -62,7 +62,7 @@ const char *node_name(struct node *node)
     const char *names[] = {
         "NULL",   "FILE",   "FUNC_DECL", "FUNC_DEF", "TYPE_DECL", "VAR_DECL",
         "ASSIGN", "ADD",    "SUB",       "MUL",      "DIV",       "MOD",
-        "CMPEQ",  "CMPNEQ", "CALL",      "VALUE",    "LITERAL"};
+        "CMPEQ",  "CMPNEQ", "CALL",      "LABEL",    "LITERAL"};
     return names[node->type];
 }
 
@@ -71,27 +71,27 @@ static void func_decl_info(struct node_func_decl *self)
     printf(" \033[32m%s\033[0m(", self->name);
 
     for (int i = 0; i < self->n_params - 1; i++) {
-        type_dump_inline(self->param_types[i]);
+        parsed_type_dump_inline(self->param_types[i]);
         printf(" %s, ", self->param_names[i]);
     }
 
     if (self->n_params) {
-        type_dump_inline(self->param_types[self->n_params - 1]);
+        parsed_type_dump_inline(self->param_types[self->n_params - 1]);
         printf(" %s", self->param_names[self->n_params - 1]);
     }
 
     printf(") -> ");
-    type_dump_inline(self->return_type);
+    parsed_type_dump_inline(self->return_type);
 }
 
 static void var_decl_info(struct node_var_decl *self)
 {
     fputc(' ', stdout);
-    type_dump_inline(self->var_type);
+    parsed_type_dump_inline(self->var_type);
     printf(" \033[32m%s\033[0m", self->name);
 }
 
-static void value_info(struct node_value *self)
+static void label_info(struct node_label *self)
 {
     printf(" \033[32m%s\033[0m", self->name);
 }
@@ -101,7 +101,7 @@ static void literal_info(struct node_literal *self)
     printf("\033[33m");
 
     if (self->type == LITERAL_INTEGER)
-        printf(" int(%lld)", self->integer_value);
+        printf(" int(%d)", self->integer_value);
     if (self->type == LITERAL_STRING)
         printf(" str(\"%s\")", self->string_value);
 
@@ -125,8 +125,8 @@ static void node_tree_dump_level(struct node *node, int level)
     case NODE_VAR_DECL:
         var_decl_info(((struct node_var_decl *) node));
         break;
-    case NODE_VALUE:
-        value_info(((struct node_value *) node));
+    case NODE_LABEL:
+        label_info(((struct node_label *) node));
         break;
     case NODE_LITERAL:
         literal_info(((struct node_literal *) node));

@@ -96,8 +96,9 @@ void tokens_tokenize(struct tokens *self)
             while (*q != '"')
                 q++;
 
-            tnew(self, TOK_STR, p + 1, (size_t) q - (size_t) p - 1);
-            p = q + 1;
+            q++;
+            tnew(self, TOK_STR, p, (size_t) q - (size_t) p);
+            p = q;
             continue;
         }
 
@@ -212,9 +213,4 @@ void tokens_tokenize(struct tokens *self)
     tnew(self, TOK_NULL, p, 0);
 
     replace_syms_with_kw(self);
-
-    for (int i = 0; i < self->n_tokens; i++) {
-        debug("%s `%.*s`", tok_typename(self->tokens[i].type),
-              self->tokens[i].len, self->tokens[i].pos);
-    }
 }

@@ -14,12 +14,16 @@
 struct allocator;
 extern struct allocator *global_ac;
 
+#define MAX_ARG 4
+
 /* -- opt.c -- */
 
 struct options
 {
     char *output;
     char *input;
+    bool set_origin;
+    int origin;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -83,6 +87,8 @@ struct tok
 
 const char *tok_typename(int type);
 
+/* Stores a token array. */
+
 struct tokens
 {
     const char *source_name;
@@ -108,6 +114,8 @@ enum type_type
     TYPE_INTEGER,
     TYPE_POINTER,
 };
+
+/* Information about a type, like its bitwidth. */
 
 struct type
 {
@@ -135,13 +143,33 @@ struct type_register
 
 void *type_alloc(struct type_register *, int type_kind);
 void type_dump(struct type *);
-void type_dump_inline(struct type *);
-const char *type_name(int type_kind);
+const char *type_kind_name(int type_kind);
+const char *type_repr(struct type *);
+int type_size(struct type *);
 
-void type_register_add_builtin(struct type_register *);
 struct type *type_register_resolve(struct type_register *, const char *name);
 struct type_pointer *type_register_add_pointer(struct type_register *,
                                                struct type *base_type);
+
+/* Parsed types are the result of the parser, and do not check for any validity,
+   which is done in the compiler. */
+
+struct parsed_type
+{
+    char *name;
+    bool is_pointer;
+    struct tok *place;
+};
+
+struct parsed_type_register
+{
+    struct parsed_type **types;
+    int n_types;
+};
+
+struct parsed_type *parsed_type_register_new(struct parsed_type_register *,
+                                             const char *name, bool is_pointer);
+void parsed_type_dump_inline(struct parsed_type *);
 
 /* -- alloc.c -- */
 
@@ -184,24 +212,36 @@ enum node_type
     NODE_CMPEQ,
     NODE_CMPNEQ,
     NODE_CALL,
-    NODE_VALUE,
+    NODE_LABEL,
     NODE_LITERAL
 };
+
+/* The result of parsing is a tree of nodes. */
 
 struct node
 {
     struct node *parent;
     struct node *child;
     struct node *next;
+    struct tok *place;
     int type;
+};
+
+#define ATTR_NAKED 1
+#define ATTR_LOCAL 2
+
+struct attributes
+{
+    int flags;
 };
 
 struct node_func_decl
 {
     struct node head;
-    struct type **param_types;
+    struct parsed_type **param_types;
     const char **param_names;
-    struct type *return_type;
+    struct parsed_type *return_type;
+    struct attributes attrs;
     char *name;
     int n_params;
 };
@@ -215,11 +255,11 @@ struct node_func_def
 struct node_var_decl
 {
     struct node head;
-    struct type *var_type;
+    struct parsed_type *var_type;
     char *name;
 };
 
-struct node_value
+struct node_label
 {
     struct node head;
     char *name;
@@ -237,7 +277,7 @@ struct node_literal
     int type;
     union
     {
-        long long integer_value;
+        int integer_value;
         char *string_value;
     };
 };
@@ -252,7 +292,7 @@ struct parser
     struct tokens *tokens;
     struct node *tree;
     int sel_tok;
-    struct type_register *types;
+    struct parsed_type_register *types;
 };
 
 struct parser *parser_new();
@@ -267,7 +307,15 @@ enum block_type
     BLOCK_FUNC,
     BLOCK_FUNC_PREAMBLE,
     BLOCK_FUNC_EPILOGUE,
+    BLOCK_LOCAL,
+    BLOCK_STORE,
+    BLOCK_LOAD,
+    BLOCK_STRING,
+    BLOCK_CALL,
+    BLOCK_ASM,
 };
+
+/* The result of compilation is a (almost) flat tree of blocks. */
 
 struct block
 {
@@ -277,16 +325,102 @@ struct block
     int type;
 };
 
+struct local
+{
+    struct type *type;
+    struct node_var_decl *decl;
+    struct block_local *local_block;
+    char *name;
+};
+
 struct block_func
 {
     struct block head;
     bool exported;
     char *label;
+    struct local **locals;
+    int n_locals;
+    int emit_locals_size;
+};
+
+struct block_local
+{
+    struct block head;
+    struct local *local;
+    int emit_offset;
+};
+
+enum imm_width_type
+{
+    IMM_8,
+    IMM_16
+};
+
+/* An immediate is a literal integer value which can be either 8 or 16 bits
+   wide. */
+
+struct imm
+{
+    int width;
+    int value;
+};
+
+enum value_type
+{
+    VALUE_IMMEDIATE,
+    VALUE_LOCAL,
+    VALUE_LABEL,
+    VALUE_STRING,
+};
+
+/* A value can either be an immediate integer value, reference to another
+   variable or an address. */
+
+struct value
+{
+    int value_type;
+    union
+    {
+        struct imm imm_value;
+        struct local *local_value;
+        char *label_value;
+        int string_id_value;
+    };
+};
+
+struct block_store
+{
+    struct block head;
+    struct local *var;
+    struct value value;
+};
+
+struct block_string
+{
+    struct block head;
+    int string_id;
+    char *value;
+};
+
+struct block_call
+{
+    struct block head;
+    char *call_name;
+    struct value *args;
+    int n_args;
+};
+
+struct block_asm
+{
+    struct block head;
+    char *source;
 };
 
 void *block_alloc(struct block *parent, int type);
-void block_add_child(struct block *any_block, struct block *child);
-void block_add_next(struct block *parent, struct block *next);
+void block_add_child(struct block *parent, struct block *child);
+void block_insert_first_child(struct block *parent, struct block *child);
+void block_add_next(struct block *any_block, struct block *next);
+void block_insert_next(struct block *any_block, struct block *next);
 const char *block_name(struct block *);
 void block_tree_dump(struct block *);
 
@@ -295,8 +429,11 @@ void block_tree_dump(struct block *);
 struct compiler
 {
     struct node *tree;
-    struct type_register *types;
     struct block *file_block;
+    struct type_register *types;
+    struct tokens *tokens;
+    struct block_string **strings;
+    int n_strings;
 };
 
 void compiler_compile(struct compiler *);
@@ -309,11 +446,24 @@ struct emitter
     struct block *file_block;
 };
 
-void emitter_emit(struct emitter *, const char *path);
+void emitter_emit(struct emitter *, struct options *opts);
 
-/* utils */
+/* -- utils.c -- */
 
 char *string_copy(const char *src, int len);
+char *string_copy_z(const char *src);
+
+/* -- error.c -- */
+
+void source_error(struct tokens *tokens, const char *here, int here_len,
+                  int offset, const char *fix_str, const char *help_str,
+                  const char *title, const char *color, const char *fmt,
+                  va_list args);
+
+void source_error_nv(struct tokens *tokens, const char *here, int here_len,
+                     int offset, const char *fix_str, const char *help_str,
+                     const char *title, const char *color, const char *fmt,
+                     ...);
 
 /* debug/die */
 

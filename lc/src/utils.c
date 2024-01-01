@@ -16,3 +16,8 @@ char *string_copy(const char *src, int len)
 
     return str;
 }
+
+char *string_copy_z(const char *src)
+{
+    return string_copy(src, strlen(src));
+}

@@ -39,7 +39,7 @@ void type_dump_level(struct type *self, int level)
     for (int i = 0; i < level; i++)
         fputs("  ", stdout);
 
-    printf("\033[31m%s\033[0m \033[33m%s\033[0m ", type_name(self->type),
+    printf("\033[31m%s\033[0m \033[33m%s\033[0m ", type_kind_name(self->type),
            self->name);
     switch (self->type) {
     case TYPE_INTEGER:
@@ -59,49 +59,42 @@ void type_dump(struct type *self)
     type_dump_level(self, 0);
 }
 
-void type_dump_inline(struct type *self)
+void parsed_type_dump_inline(struct parsed_type *self)
 {
-    struct type *base_type;
-    int derefs;
-
     if (self == NULL) {
         printf("\033[31mnull\033[0m");
         return;
     }
 
-    derefs = 0;
-    base_type = self;
-
-    while (base_type->type == TYPE_POINTER) {
-        base_type = ((struct type_pointer *) base_type)->base_type;
-        derefs++;
-    }
-
-    printf("\033[31m%s", base_type->name);
-
-    for (int i = 0; i < derefs; i++)
-        fputc('&', stdout);
-
-    printf("\033[0m");
+    printf("\033[31m%s%s\033[0m", self->name, self->is_pointer ? "&" : "");
 }
 
-const char *type_name(int type_kind)
+const char *type_kind_name(int type_kind)
 {
     const char *names[] = {"NULL", "INTEGER", "POINTER"};
     return names[type_kind];
 }
 
-void type_register_add_builtin(struct type_register *self)
+const char *type_repr(struct type *self)
 {
-    struct type_integer *type;
+    char *name;
 
-    type = type_alloc(self, TYPE_INTEGER);
-    type->head.name = string_copy("int", 3);
-    type->bit_width = 16;
+    name = ac_alloc(global_ac, 64);
+    snprintf(name, 64, "%s%s", self->name,
+             self->type == TYPE_POINTER ? "&" : "");
 
-    type = type_alloc(self, TYPE_INTEGER);
-    type->head.name = string_copy("char", 4);
-    type->bit_width = 8;
+    return name;
+}
+
+int type_size(struct type *self)
+{
+    if (self->type == TYPE_INTEGER)
+        return ((struct type_integer *) self)->bit_width >> 3;
+    if (self->type == TYPE_POINTER)
+        return 2;
+
+    die("cannot calculate type_size for %s", type_kind_name(self->type));
+    return 0;
 }
 
 struct type *type_register_resolve(struct type_register *self, const char *name)
@@ -143,4 +136,22 @@ struct type_pointer *type_register_add_pointer(struct type_register *self,
     pointer_type->base_type = base_type;
 
     return pointer_type;
+}
+
+struct parsed_type *parsed_type_register_new(struct parsed_type_register *self,
+                                             const char *name, bool is_pointer)
+{
+    struct parsed_type *type;
+
+    self->types =
+        ac_realloc(global_ac, self->types,
+                   sizeof(struct parsed_type *) * (self->n_types + 1));
+
+    type = ac_alloc(global_ac, sizeof(struct parsed_type));
+    type->name = string_copy(name, strlen(name));
+    type->is_pointer = is_pointer;
+
+    self->types[self->n_types++] = type;
+
+    return type;
 }

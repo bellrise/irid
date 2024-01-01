@@ -38,13 +38,13 @@ int main(int argc, char **argv)
     parser->tokens = tokens;
     parser_parse(parser);
 
-    compiler.types = parser->types;
     compiler.tree = parser->tree;
     compiler.file_block = NULL;
+    compiler.tokens = tokens;
     compiler_compile(&compiler);
 
     emitter.file_block = compiler.file_block;
-    emitter_emit(&emitter, opts.output);
+    emitter_emit(&emitter, &opts);
 
     fclose(emitter.out);
     allocator_free_all(global_ac);
