@@ -18,6 +18,17 @@ static void ce(struct compiler *self, struct tok *place, const char *fmt, ...)
     exit(1);
 }
 
+static void ceh(struct compiler *self, struct tok *place, const char *help_msg,
+                const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    source_error(self->tokens, place->pos, place->len, 0, NULL, help_msg,
+                 "error", "\033[31m", fmt, args);
+    va_end(args);
+    exit(1);
+}
+
 static void assign_error(struct compiler *self, struct local *local,
                          struct node_literal *literal)
 {
@@ -247,6 +258,27 @@ static void compile_asm_call(struct compiler *self, struct block_func *func,
     asm_block->source = string_copy_z(source_node->string_value);
 }
 
+static void validate_call_args(struct compiler *self,
+                               struct node_call *call_node,
+                               struct block_call *call_block,
+                               struct node_func_decl *decl)
+{
+    struct value *arg;
+
+    if (call_block->n_args < decl->n_params) {
+        ce(self, call_node->call_end_place,
+           "missing '%s' argument for function",
+           decl->param_names[call_block->n_args]);
+    }
+
+    if (call_block->n_args > decl->n_params) {
+        ce(self, call_block->args[decl->n_params].place,
+           "too many arguments for function");
+    }
+
+    // TODO compare the types of arguments to the types of parameters
+}
+
 static void compile_call(struct compiler *self, struct block_func *func,
                          struct node *call)
 {
@@ -286,8 +318,11 @@ static void compile_call(struct compiler *self, struct block_func *func,
 
         convert_node_into_value(self, func,
                                 &call_block->args[call_block->n_args++], arg);
+        call_block->args[call_block->n_args - 1].place = arg->place;
         arg = arg->next;
     }
+
+    validate_call_args(self, (struct node_call *) call, call_block, decl);
 
     block_add_child((struct block *) func, (struct block *) call_block);
 }
@@ -319,7 +354,8 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
             compile_call(self, func_block, node_walker);
             break;
         default:
-            ce(self, node_walker->place, "invalid place for this expression");
+            ceh(self, node_walker->place, "tip: dunno how to compile this",
+                "invalid place for this expression");
         }
 
         node_walker = node_walker->next;

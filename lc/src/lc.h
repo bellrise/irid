@@ -265,6 +265,12 @@ struct node_label
     char *name;
 };
 
+struct node_call
+{
+    struct node head;
+    struct tok *call_end_place;
+};
+
 enum literal_type
 {
     LITERAL_INTEGER,
@@ -379,6 +385,7 @@ enum value_type
 struct value
 {
     int value_type;
+    struct tok *place;
     union
     {
         struct imm imm_value;

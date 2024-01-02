@@ -211,7 +211,9 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent);
 
 static void parse_call_args(struct parser *self, struct node *call)
 {
+    struct node *arg;
     struct tok *tok;
+    struct tok *start_tok;
 
     tok = tokcur(self);
 
@@ -219,7 +221,9 @@ static void parse_call_args(struct parser *self, struct node *call)
         if (tok->type == TOK_RPAREN)
             break;
 
+        start_tok = tok;
         node_add_child(call, parse_expr_inside(self, call));
+        tok = tokcur(self);
 
         tok = toknext(self);
         if (tok->type == TOK_RPAREN)
@@ -308,6 +312,32 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
     tok = tokpeek(self);
     tmptok = tok;
 
+    /* expr '(' ... ')' */
+
+    if (tok->type == TOK_LPAREN) {
+        tok = toknext(self);
+        tok = toknext(self);
+
+        /* node_call:
+            - some name
+            - arg1
+            - arg2
+            - ...
+         */
+
+        expr = node_alloc(NULL, NODE_CALL);
+        expr->place = tmptok;
+        node_add_child(expr, left_expr);
+        parse_call_args(self, expr);
+
+        ((struct node_call *) expr)->call_end_place = tokcur(self);
+
+        left_expr = expr;
+    }
+
+    tok = tokpeek(self);
+    tmptok = tok;
+
     /* expr '=' expr */
 
     if (tok->type == TOK_EQ) {
@@ -326,27 +356,6 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
 
         node_add_child(expr, left_expr);
         node_add_child(expr, right_expr);
-
-        return expr;
-    }
-
-    /* expr '(' ... ')' */
-
-    if (tok->type == TOK_LPAREN) {
-        tok = toknext(self);
-        tok = toknext(self);
-
-        /* node_call:
-            - some name
-            - arg1
-            - arg2
-            - ...
-         */
-
-        expr = node_alloc(NULL, NODE_CALL);
-        expr->place = tmptok;
-        node_add_child(expr, left_expr);
-        parse_call_args(self, expr);
 
         return expr;
     }

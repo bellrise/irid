@@ -27,6 +27,9 @@ void *node_alloc(struct node *parent, int type)
     case NODE_LITERAL:
         alloc_size = sizeof(struct node_literal);
         break;
+    case NODE_CALL:
+        alloc_size = sizeof(struct node_call);
+        break;
     default:
         alloc_size = sizeof(struct node);
     }
