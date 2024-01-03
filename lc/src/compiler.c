@@ -199,7 +199,7 @@ static void convert_call_node_into_value(struct compiler *self,
     result_local->name = ac_alloc(global_ac, 8);
     result_local->type = func_sig->return_type;
 
-    snprintf(result_local->name, 8, "%%%d", func->result_index++);
+    snprintf(result_local->name, 8, "%%%d", func->var_index++);
 
     compile_call(self, func, node);
 
@@ -225,10 +225,10 @@ static void convert_node_into_value(struct compiler *self,
         value->value_type = VALUE_LOCAL;
         value->local_value =
             find_local(func, ((struct node_label *) node)->name);
-        value->local_value->used = true;
-
         if (!value->local_value)
             ce(self, node->place, "undeclared variable");
+
+        value->local_value->used = true;
     }
 
     else if (node->type == NODE_ADD) {
@@ -405,9 +405,7 @@ static void compile_call(struct compiler *self, struct block_func *func,
     block_add_child((struct block *) func, (struct block *) call_block);
 }
 
-static void compile_return(struct compiler *self,
-                           struct node_func_decl *func_decl,
-                           struct block_func *func_block,
+static void compile_return(struct compiler *self, struct block_func *func_block,
                            struct node *return_node)
 {
     struct block_store *return_block;
@@ -432,13 +430,36 @@ static void compile_return(struct compiler *self,
     }
 
     if (val) {
-        return_block =
-            block_alloc((struct block *) func_block, BLOCK_STORE_RETURN);
+        return_block = block_alloc(NULL, BLOCK_STORE_RETURN);
         convert_node_into_value(self, func_block, &return_block->value, val);
+        block_add_child((struct block *) func_block,
+                        (struct block *) return_block);
     }
 
     exit_jmp = block_alloc((struct block *) func_block, BLOCK_JMP);
     exit_jmp->dest = string_copy_z("E");
+}
+
+static void func_store_arguments(struct compiler *self,
+                                 struct node_func_decl *func_decl,
+                                 struct block_func *func_block)
+{
+    struct block_store_arg *store_block;
+    struct func_sig *func_sig;
+    struct local *arg_local;
+
+    func_sig = find_func(self, func_decl->name);
+
+    for (int i = 0; i < func_sig->n_params; i++) {
+        arg_local = alloc_local(func_block);
+        arg_local->type = func_sig->param_types[i];
+        arg_local->name = string_copy_z(func_decl->param_names[i]);
+        arg_local->decl = NULL;
+
+        store_block = block_alloc((struct block *) func_block, BLOCK_STORE_ARG);
+        store_block->arg = i;
+        store_block->local = arg_local;
+    }
 }
 
 static void compile_func(struct compiler *self, struct node_func_def *func)
@@ -457,6 +478,8 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
     if (!(func->decl->attrs.flags & ATTR_NAKED))
         block_alloc((struct block *) func_block, BLOCK_PREAMBLE);
 
+    func_store_arguments(self, func->decl, func_block);
+
     node_walker = func->head.child;
     while (node_walker) {
 
@@ -472,7 +495,7 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
             compile_call(self, func_block, node_walker);
             break;
         case NODE_RETURN:
-            compile_return(self, func->decl, func_block, node_walker);
+            compile_return(self, func_block, node_walker);
             break;
         default:
             ceh(self, node_walker->place, "tip: dunno how to compile this",

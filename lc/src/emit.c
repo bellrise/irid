@@ -171,6 +171,13 @@ static void emit_store_result(struct emitter *self,
     store_register_into_local(self, R_R0, store_return->var->local_block);
 }
 
+static void emit_store_arg(struct emitter *self,
+                           struct block_store_arg *store_arg)
+{
+    store_register_into_local(self, R_R0 + store_arg->arg,
+                              store_arg->local->local_block);
+}
+
 static void emit_func(struct emitter *self, struct block_func *func)
 {
     struct block *block;
@@ -213,6 +220,9 @@ static void emit_func(struct emitter *self, struct block_func *func)
             break;
         case BLOCK_STORE_RESULT:
             emit_store_result(self, (struct block_store *) block);
+            break;
+        case BLOCK_STORE_ARG:
+            emit_store_arg(self, (struct block_store_arg *) block);
             break;
         default:
             die("don't know how to emit %s", block_name(block));

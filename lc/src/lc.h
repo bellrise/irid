@@ -322,6 +322,7 @@ enum block_type
     BLOCK_STORE,
     BLOCK_STORE_RETURN,
     BLOCK_STORE_RESULT,
+    BLOCK_STORE_ARG,
     BLOCK_LOAD,
     BLOCK_STRING,
     BLOCK_CALL,
@@ -358,7 +359,7 @@ struct block_func
     int n_locals;
     int emit_locals_size;
     struct type *return_type;
-    int result_index;
+    int var_index;
 };
 
 struct block_local
@@ -465,6 +466,13 @@ struct block_label
 {
     struct block head;
     char *label;
+};
+
+struct block_store_arg
+{
+    struct block head;
+    struct local *local;
+    int arg;
 };
 
 void *block_alloc(struct block *parent, int type);

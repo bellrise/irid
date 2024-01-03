@@ -27,6 +27,9 @@ void *block_alloc(struct block *parent, int type)
     case BLOCK_STORE:
         alloc_size = sizeof(struct block_store);
         break;
+    case BLOCK_STORE_ARG:
+        alloc_size = sizeof(struct block_store_arg);
+        break;
     case BLOCK_CALL:
         alloc_size = sizeof(struct block_call);
         break;
@@ -95,9 +98,10 @@ void block_insert_next(struct block *any_block, struct block *sel_block)
 const char *block_name(struct block *block)
 {
     const char *names[] = {
-        "NULL",   "FILE_START", "FUNC",         "PREAMBLE",     "EPILOGUE",
-        "LOCAL",  "STORE",      "STORE_RETURN", "STORE_RESULT", "LOAD",
-        "STRING", "CALL",       "ASM",          "JMP",          "LABEL"};
+        "NULL",         "FILE_START", "FUNC",  "PREAMBLE",
+        "EPILOGUE",     "LOCAL",      "STORE", "STORE_RETURN",
+        "STORE_RESULT", "STORE_ARG",  "LOAD",  "STRING",
+        "CALL",         "ASM",        "JMP",   "LABEL"};
     return names[block->type];
 }
 
@@ -147,6 +151,11 @@ static void store_result_info(struct block_store *self)
     printf(" %s", self->var->name);
 }
 
+static void store_arg_info(struct block_store_arg *self)
+{
+    printf(" %s [%d]", self->local->name, self->arg);
+}
+
 static void call_info(struct block_call *self)
 {
     printf(" %s(", self->call_name);
@@ -179,6 +188,9 @@ static void block_tree_dump_level(struct block *block, int level)
         break;
     case BLOCK_STORE_RESULT:
         store_result_info((struct block_store *) block);
+        break;
+    case BLOCK_STORE_ARG:
+        store_arg_info((struct block_store_arg *) block);
         break;
     case BLOCK_STRING:
         string_info((struct block_string *) block);
