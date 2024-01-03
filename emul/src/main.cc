@@ -33,9 +33,10 @@ static void load_images(const std::vector<image_argument>& images,
 
 int main(int argc, char **argv)
 {
-    struct settings settings;
+    struct settings settings = {};
 
     settings.target_ips = 10000;
+    settings.show_perf_results = false;
 
     parse_args(settings, argc, argv);
 

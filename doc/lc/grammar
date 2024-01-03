@@ -11,10 +11,19 @@ type-decl:
     | 'type' symbol '{' type-body '}'
 
 func-decl:
-    | 'func' symbol '(' [ func-params ] ')' [ '->' type ]
+    | 'func' symbol '(' [ func-params ] ')' [ '->' type ] [ func-attrs ]
+
+func-params:
+    | func-param ( ',' type-param )*
+
+func-param:
+    | type symbol
+
+func-attrs:
+    | '[' attr ( ',' attr )* ']'
 
 func-def:
-    | 'func' symbol '(' [ func-params ] ')' [ '->' type ] '{' func-body '}'
+    | func-decl '{' func-body '}'
 
 type:
     | symbol [ '&' ]
@@ -23,19 +32,23 @@ type-body:
     | ( type symbol ';' )*
 
 func-body:
-    | ( ( var-decl | expr | if-else ) ';' )*
+    | ( ( var-decl | expr | assign | if-else ) ';' )*
 
 var-decl:
     | 'let' type symbol
 
 expr:
-    | '(' expr ')'
-    | expr ( '+' | '-' | '*' | '/' | '%' ) expr
-    | expr ( '==' | '!=' ) expr
-    | expr '(' [ expr [ ',' expr ]* ] ')'
-    | expr '=' expr
+    | '(' ( expr | assign | math-op ) ')'
+    | expr '(' [ expr ( ',' expr )* ] ')'
     | symbol
     | literal
+
+math-op:
+    | expr ( '+' | '-' | '*' | '/' | '%' ) expr
+    | expr ( '==' | '!=' ) expr
+
+assign:
+    | expr '=' expr
 
 if-else:
     | 'if' '(' expr ')' '{' func-body '}' [ 'else' '{ func-body '}' ]
