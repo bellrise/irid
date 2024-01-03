@@ -403,6 +403,25 @@ static void parse_expr(struct parser *self, struct node *parent)
     node_add_child(parent, parse_expr_inside(self, parent));
 }
 
+static void parse_return(struct parser *self, struct node *parent)
+{
+    struct node *return_node;
+    struct tok *tok;
+
+    tok = tokcur(self);
+    if (tok->type != TOK_KW_RETURN)
+        pef(self, tok, "return", "expected return keyword");
+
+    return_node = node_alloc(parent, NODE_RETURN);
+    return_node->place = tok;
+
+    tok = toknext(self);
+    if (tok->type == TOK_SEMICOLON)
+        return;
+
+    parse_expr(self, return_node);
+}
+
 static void parse_func_body(struct parser *self, struct node_func_def *func_def)
 {
     struct tok *tok;
@@ -415,6 +434,9 @@ static void parse_func_body(struct parser *self, struct node_func_def *func_def)
             return;
         case TOK_KW_LET:
             parse_var_decl(self, (struct node *) func_def);
+            break;
+        case TOK_KW_RETURN:
+            parse_return(self, (struct node *) func_def);
             break;
         default:
             parse_expr(self, (struct node *) func_def);

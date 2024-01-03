@@ -22,6 +22,8 @@ void *block_alloc(struct block *parent, int type)
     case BLOCK_STRING:
         alloc_size = sizeof(struct block_string);
         break;
+    case BLOCK_STORE_RETURN:
+    case BLOCK_STORE_RESULT:
     case BLOCK_STORE:
         alloc_size = sizeof(struct block_store);
         break;
@@ -30,6 +32,12 @@ void *block_alloc(struct block *parent, int type)
         break;
     case BLOCK_ASM:
         alloc_size = sizeof(struct block_asm);
+        break;
+    case BLOCK_LABEL:
+        alloc_size = sizeof(struct block_label);
+        break;
+    case BLOCK_JMP:
+        alloc_size = sizeof(struct block_jmp);
         break;
     default:
         alloc_size = sizeof(struct block);
@@ -87,9 +95,9 @@ void block_insert_next(struct block *any_block, struct block *sel_block)
 const char *block_name(struct block *block)
 {
     const char *names[] = {
-        "NULL",          "FILE_START", "FUNC",  "FUNC_PREAMBLE",
-        "FUNC_EPILOGUE", "LOCAL",      "STORE", "LOAD",
-        "STRING",        "CALL",       "ASM"};
+        "NULL",   "FILE_START", "FUNC",         "PREAMBLE",     "EPILOGUE",
+        "LOCAL",  "STORE",      "STORE_RETURN", "STORE_RESULT", "LOAD",
+        "STRING", "CALL",       "ASM",          "JMP",          "LABEL"};
     return names[block->type];
 }
 
@@ -105,6 +113,8 @@ static void local_info(struct block_local *self)
 
 static void value_inline(struct value *val)
 {
+    if (val->value_type == VALUE_NULL)
+        printf("null");
     if (val->value_type == VALUE_IMMEDIATE)
         printf("imm%d(%d)", val->imm_value.width, val->imm_value.value);
     if (val->value_type == VALUE_STRING)
@@ -124,6 +134,17 @@ static void store_info(struct block_store *self)
 {
     printf(" %s = ", self->var->name);
     value_inline(&self->value);
+}
+
+static void store_return_info(struct block_store *self)
+{
+    printf(" ");
+    value_inline(&self->value);
+}
+
+static void store_result_info(struct block_store *self)
+{
+    printf(" %s", self->var->name);
 }
 
 static void call_info(struct block_call *self)
@@ -153,6 +174,12 @@ static void block_tree_dump_level(struct block *block, int level)
     case BLOCK_STORE:
         store_info((struct block_store *) block);
         break;
+    case BLOCK_STORE_RETURN:
+        store_return_info((struct block_store *) block);
+        break;
+    case BLOCK_STORE_RESULT:
+        store_result_info((struct block_store *) block);
+        break;
     case BLOCK_STRING:
         string_info((struct block_string *) block);
         break;
@@ -161,6 +188,12 @@ static void block_tree_dump_level(struct block *block, int level)
         break;
     case BLOCK_ASM:
         printf(" \"%s\"", ((struct block_asm *) block)->source);
+        break;
+    case BLOCK_LABEL:
+        printf(" %s", ((struct block_label *) block)->label);
+        break;
+    case BLOCK_JMP:
+        printf(" %s", ((struct block_jmp *) block)->dest);
         break;
     };
 

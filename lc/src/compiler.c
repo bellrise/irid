@@ -54,6 +54,23 @@ static void assign_error(struct compiler *self, struct local *local,
                     "declared here", local->name);
 }
 
+static struct type *make_real_type(struct compiler *self,
+                                   struct parsed_type *parsed_type)
+{
+    struct type *base_type;
+
+    base_type = type_register_resolve(self->types, parsed_type->name);
+    if (!base_type)
+        ce(self, parsed_type->place, "unknown type");
+
+    if (parsed_type->is_pointer) {
+        return (struct type *) type_register_add_pointer(self->types,
+                                                         base_type);
+    }
+
+    return base_type;
+}
+
 static struct local *alloc_local(struct block_func *func)
 {
     struct local *local;
@@ -83,7 +100,7 @@ static void compile_var_decl(struct compiler *self, struct block_func *func,
 
     local = alloc_local(func);
 
-    local->type = type_register_resolve(self->types, decl->var_type->name);
+    local->type = make_real_type(self, decl->var_type);
     if (!local->type)
         ce(self, decl->var_type->place, "unknown type");
     local->name = string_copy_z(decl->name);
@@ -140,6 +157,59 @@ static void convert_literal_into_value(struct compiler *self,
     }
 }
 
+static struct func_sig *find_func(struct compiler *self, char *name)
+{
+    for (int i = 0; i < self->n_funcs; i++) {
+        if (!strcmp(self->funcs[i]->name, name))
+            return self->funcs[i];
+    }
+
+    return NULL;
+}
+
+static void compile_call(struct compiler *self, struct block_func *func,
+                         struct node *call);
+
+static void convert_call_node_into_value(struct compiler *self,
+                                         struct block_func *func,
+                                         struct value *value, struct node *node)
+{
+
+    struct local *result_local;
+    struct func_sig *func_sig;
+    struct node_label *func_name;
+    struct block_store *store_block;
+
+    /* Allocate a new local to store our result. */
+
+    func_name = (struct node_label *) node->child;
+    if (func_name->head.type != NODE_LABEL)
+        ce(self, func_name->head.place, "expected function name here");
+
+    func_sig = find_func(self, func_name->name);
+    if (!func_sig)
+        ce(self, func_name->head.place, "undeclared function");
+
+    if (type_is_null(func_sig->return_type)) {
+        ce(self, func_name->head.place, "%s does not return any value",
+           func_name->name);
+    }
+
+    result_local = alloc_local(func);
+    result_local->name = ac_alloc(global_ac, 8);
+    result_local->type = func_sig->return_type;
+
+    snprintf(result_local->name, 8, "%%%d", func->result_index++);
+
+    compile_call(self, func, node);
+
+    store_block = block_alloc((struct block *) func, BLOCK_STORE_RESULT);
+    store_block->var = result_local;
+
+    value->value_type = VALUE_LOCAL;
+    value->local_value = result_local;
+}
+
 static void convert_node_into_value(struct compiler *self,
                                     struct block_func *func,
                                     struct value *value, struct node *node)
@@ -177,6 +247,10 @@ static void convert_node_into_value(struct compiler *self,
 
         convert_node_into_value(self, func, value->op_value.left, left);
         convert_node_into_value(self, func, value->op_value.right, right);
+    }
+
+    else if (node->type == NODE_CALL) {
+        convert_call_node_into_value(self, func, value, node);
     }
 
     else {
@@ -240,27 +314,6 @@ static void add_local_blocks(struct block_func *func)
     }
 }
 
-static struct node_func_decl *find_func_decl(struct compiler *self,
-                                             const char *name)
-{
-    struct node *walker;
-    struct node_func_decl *decl;
-
-    walker = self->tree->child;
-
-    while (walker) {
-        if (walker->type == NODE_FUNC_DECL) {
-            decl = (struct node_func_decl *) walker;
-            if (!strcmp(decl->name, name))
-                return decl;
-        }
-
-        walker = walker->next;
-    }
-
-    return NULL;
-}
-
 static void compile_asm_call(struct compiler *self, struct block_func *func,
                              struct node *call)
 {
@@ -288,16 +341,16 @@ static void compile_asm_call(struct compiler *self, struct block_func *func,
 static void validate_call_args(struct compiler *self,
                                struct node_call *call_node,
                                struct block_call *call_block,
-                               struct node_func_decl *decl)
+                               struct func_sig *func)
 {
-    if (call_block->n_args < decl->n_params) {
+    if (call_block->n_args < func->n_params) {
         ce(self, call_node->call_end_place,
            "missing '%s' argument for function",
-           decl->param_names[call_block->n_args]);
+           func->decl->param_names[call_block->n_args]);
     }
 
-    if (call_block->n_args > decl->n_params) {
-        ce(self, call_block->args[decl->n_params].place,
+    if (call_block->n_args > func->n_params) {
+        ce(self, call_block->args[func->n_params].place,
            "too many arguments for function");
     }
 
@@ -307,7 +360,7 @@ static void validate_call_args(struct compiler *self,
 static void compile_call(struct compiler *self, struct block_func *func,
                          struct node *call)
 {
-    struct node_func_decl *decl;
+    struct func_sig *func_sig;
     struct node_label *label;
     struct block_call *call_block;
     struct node *arg;
@@ -323,16 +376,16 @@ static void compile_call(struct compiler *self, struct block_func *func,
         return;
     }
 
-    decl = find_func_decl(self, label->name);
+    func_sig = find_func(self, label->name);
 
-    if (!decl)
+    if (!func_sig)
         ce(self, label->head.place, "undeclared function");
 
     /* Allocate space for MAX_ARG arguments. */
 
     call_block = block_alloc(NULL, BLOCK_CALL);
     call_block->args = ac_alloc(global_ac, sizeof(struct value) * MAX_ARG);
-    call_block->call_name = string_copy_z(decl->name);
+    call_block->call_name = string_copy_z(func_sig->name);
 
     arg = label->head.next;
     while (arg) {
@@ -347,22 +400,62 @@ static void compile_call(struct compiler *self, struct block_func *func,
         arg = arg->next;
     }
 
-    validate_call_args(self, (struct node_call *) call, call_block, decl);
+    validate_call_args(self, (struct node_call *) call, call_block, func_sig);
 
     block_add_child((struct block *) func, (struct block *) call_block);
+}
+
+static void compile_return(struct compiler *self,
+                           struct node_func_decl *func_decl,
+                           struct block_func *func_block,
+                           struct node *return_node)
+{
+    struct block_store *return_block;
+    struct block_jmp *exit_jmp;
+    struct node *val;
+
+    /* With a return type. */
+
+    if (!type_is_null(func_block->return_type)) {
+        if (!return_node->child)
+            ce(self, return_node->place, "missing return value");
+        val = return_node->child;
+    }
+
+    /* Without a return type. */
+    else {
+        if (return_node->child) {
+            ce(self, return_node->child->place,
+               "this function cannot not return any value");
+        }
+        val = NULL;
+    }
+
+    if (val) {
+        return_block =
+            block_alloc((struct block *) func_block, BLOCK_STORE_RETURN);
+        convert_node_into_value(self, func_block, &return_block->value, val);
+    }
+
+    exit_jmp = block_alloc((struct block *) func_block, BLOCK_JMP);
+    exit_jmp->dest = string_copy_z("E");
 }
 
 static void compile_func(struct compiler *self, struct node_func_def *func)
 {
     struct block_func *func_block;
+    struct block_label *exit_label;
     struct node *node_walker;
 
     func_block = block_alloc(self->file_block, BLOCK_FUNC);
     func_block->label = string_copy_z(func->decl->name);
     func_block->exported = !(func->decl->attrs.flags & ATTR_LOCAL);
 
+    if (func->decl->return_type)
+        func_block->return_type = make_real_type(self, func->decl->return_type);
+
     if (!(func->decl->attrs.flags & ATTR_NAKED))
-        block_alloc((struct block *) func_block, BLOCK_FUNC_PREAMBLE);
+        block_alloc((struct block *) func_block, BLOCK_PREAMBLE);
 
     node_walker = func->head.child;
     while (node_walker) {
@@ -378,6 +471,9 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
         case NODE_CALL:
             compile_call(self, func_block, node_walker);
             break;
+        case NODE_RETURN:
+            compile_return(self, func->decl, func_block, node_walker);
+            break;
         default:
             ceh(self, node_walker->place, "tip: dunno how to compile this",
                 "invalid place for this expression");
@@ -391,14 +487,19 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
 
     add_local_blocks(func_block);
 
+    exit_label = block_alloc((struct block *) func_block, BLOCK_LABEL);
+    exit_label->label = string_copy_z("E");
+
     if (!(func->decl->attrs.flags & ATTR_NAKED))
-        block_alloc((struct block *) func_block, BLOCK_FUNC_EPILOGUE);
+        block_alloc((struct block *) func_block, BLOCK_EPILOGUE);
 
     /* Walk through the locals to check if there are any unused variables. */
 
     if (self->opts->w_unused_var) {
         for (int i = 0; i < func_block->n_locals; i++) {
             if (func_block->locals[i]->used)
+                continue;
+            if (!func_block->locals[i]->decl)
                 continue;
 
             cw(self, func_block->locals[i]->decl->head.place,
@@ -420,6 +521,50 @@ static void add_builtin_types(struct compiler *self)
     type->bit_width = 8;
 }
 
+static struct func_sig *alloc_func_sig(struct compiler *self)
+{
+    struct func_sig *sig;
+
+    sig = ac_alloc(global_ac, sizeof(struct func_sig));
+    self->funcs = ac_realloc(global_ac, self->funcs,
+                             sizeof(struct func_sig *) * (self->n_funcs + 1));
+    self->funcs[self->n_funcs++] = sig;
+
+    return sig;
+}
+
+static void func_sig_add_param_type(struct func_sig *func, struct type *type)
+{
+    func->param_types =
+        ac_realloc(global_ac, func->param_types,
+                   sizeof(struct type *) * (func->n_params + 1));
+    func->param_types[func->n_params++] = type;
+}
+
+static void compile_func_decl(struct compiler *self,
+                              struct node_func_decl *func_decl)
+{
+    struct func_sig *func;
+    struct type *type;
+
+    for (int i = 0; i < self->n_funcs; i++) {
+        if (!strcmp(self->funcs[i]->name, func_decl->name))
+            ce(self, func_decl->head.place, "this function is already defined");
+    }
+
+    func = alloc_func_sig(self);
+    func->name = string_copy_z(func_decl->name);
+    func->decl = func_decl;
+
+    if (func_decl->return_type)
+        func->return_type = make_real_type(self, func_decl->return_type);
+
+    for (int i = 0; i < func_decl->n_params; i++) {
+        type = make_real_type(self, func_decl->param_types[i]);
+        func_sig_add_param_type(func, type);
+    }
+}
+
 void compiler_compile(struct compiler *self)
 {
     struct node *func_walker;
@@ -428,8 +573,21 @@ void compiler_compile(struct compiler *self)
     self->types = ac_alloc(global_ac, sizeof(struct type_register));
     self->strings = NULL;
     self->n_strings = 0;
+    self->funcs = NULL;
+    self->n_funcs = 0;
 
     add_builtin_types(self);
+
+    /* First, collect all function declarations. */
+
+    func_walker = self->tree->child;
+    while (func_walker) {
+        if (func_walker->type == NODE_FUNC_DECL)
+            compile_func_decl(self, (struct node_func_decl *) func_walker);
+        func_walker = func_walker->next;
+    }
+
+    /* Walk through the tree again to compile all function definitions. */
 
     func_walker = self->tree->child;
     while (func_walker) {

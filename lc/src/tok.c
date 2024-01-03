@@ -28,12 +28,12 @@ static void tnew(struct tokens *self, int type, const char *s, int len)
 const char *tok_typename(int type)
 {
     const char *toknames[] = {
-        "NULL",      "NUM",     "CHAR",   "STR",    "SYM",     "KW_TYPE",
-        "KW_DECL",   "KW_FUNC", "KW_LET", "KW_IF",  "KW_ELSE", "SEMICOLON",
-        "COLON",     "LBRACE",  "RBRACE", "LPAREN", "RPAREN",  "LBRACKET",
-        "RBRACKET",  "ARROW",   "PLUS",   "MINUS",  "STAR",    "SLASH",
-        "EQ",        "CMPEQ",   "CMPNEQ", "NOT",    "DOT",     "COMMA",
-        "AMPERSAND", "QUOTE",   "PERCENT"};
+        "NULL",      "NUM",       "CHAR",   "STR",    "SYM",     "KW_TYPE",
+        "KW_DECL",   "KW_FUNC",   "KW_LET", "KW_IF",  "KW_ELSE", "KW_RETURN",
+        "SEMICOLON", "COLON",     "LBRACE", "RBRACE", "LPAREN",  "RPAREN",
+        "LBRACKET",  "RBRACKET",  "ARROW",  "PLUS",   "MINUS",   "STAR",
+        "SLASH",     "EQ",        "CMPEQ",  "CMPNEQ", "NOT",     "DOT",
+        "COMMA",     "AMPERSAND", "QUOTE",  "PERCENT"};
 
     return toknames[type];
 }
@@ -59,12 +59,12 @@ static void replace_syms_with_kw(struct tokens *self)
     {
         int type;
         const char *name;
-    } strings[] = {
-        {TOK_KW_TYPE, "type"}, {TOK_KW_DECL, "decl"}, {TOK_KW_FUNC, "func"},
-        {TOK_KW_LET, "let"},   {TOK_KW_IF, "if"},     {TOK_KW_ELSE, "else"},
-    };
+    } strings[] = {{TOK_KW_TYPE, "type"},    {TOK_KW_DECL, "decl"},
+                   {TOK_KW_FUNC, "func"},    {TOK_KW_LET, "let"},
+                   {TOK_KW_IF, "if"},        {TOK_KW_ELSE, "else"},
+                   {TOK_KW_RETURN, "return"}};
 
-    const int n_strings = 6;
+    const int n_strings = 7;
     int len;
 
     for (int i = 0; i < self->n_tokens; i++) {

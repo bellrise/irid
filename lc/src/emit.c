@@ -149,6 +149,28 @@ static void emit_asm(struct emitter *self, struct block_asm *_asm)
     fprintf(self->out, "    %s\n", _asm->source);
 }
 
+static void emit_label(struct emitter *self, struct block_label *label)
+{
+    fprintf(self->out, "@%s:\n", label->label);
+}
+
+static void emit_jmp(struct emitter *self, struct block_jmp *jmp)
+{
+    fprintf(self->out, "    jmp @%s\n", jmp->dest);
+}
+
+static void emit_store_return(struct emitter *self,
+                              struct block_store *store_return)
+{
+    store_value_into_register(self, R_R0, &store_return->value);
+}
+
+static void emit_store_result(struct emitter *self,
+                              struct block_store *store_return)
+{
+    store_register_into_local(self, R_R0, store_return->var->local_block);
+}
+
 static void emit_func(struct emitter *self, struct block_func *func)
 {
     struct block *block;
@@ -162,10 +184,10 @@ static void emit_func(struct emitter *self, struct block_func *func)
     block = func->head.child;
     while (block) {
         switch (block->type) {
-        case BLOCK_FUNC_PREAMBLE:
+        case BLOCK_PREAMBLE:
             emit_func_preamble(self, func);
             break;
-        case BLOCK_FUNC_EPILOGUE:
+        case BLOCK_EPILOGUE:
             emit_func_epilogue(self);
             break;
         case BLOCK_LOCAL:
@@ -179,6 +201,18 @@ static void emit_func(struct emitter *self, struct block_func *func)
             break;
         case BLOCK_ASM:
             emit_asm(self, (struct block_asm *) block);
+            break;
+        case BLOCK_LABEL:
+            emit_label(self, (struct block_label *) block);
+            break;
+        case BLOCK_JMP:
+            emit_jmp(self, (struct block_jmp *) block);
+            break;
+        case BLOCK_STORE_RETURN:
+            emit_store_return(self, (struct block_store *) block);
+            break;
+        case BLOCK_STORE_RESULT:
+            emit_store_result(self, (struct block_store *) block);
             break;
         default:
             die("don't know how to emit %s", block_name(block));

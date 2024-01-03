@@ -86,6 +86,13 @@ const char *type_repr(struct type *self)
     return name;
 }
 
+bool type_is_null(struct type *self)
+{
+    if (!self)
+        return true;
+    return self->type == TYPE_NULL;
+}
+
 int type_size(struct type *self)
 {
     if (self->type == TYPE_INTEGER)

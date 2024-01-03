@@ -65,7 +65,7 @@ const char *node_name(struct node *node)
     const char *names[] = {
         "NULL",   "FILE",   "FUNC_DECL", "FUNC_DEF", "TYPE_DECL", "VAR_DECL",
         "ASSIGN", "ADD",    "SUB",       "MUL",      "DIV",       "MOD",
-        "CMPEQ",  "CMPNEQ", "CALL",      "LABEL",    "LITERAL"};
+        "CMPEQ",  "CMPNEQ", "CALL",      "LABEL",    "LITERAL",   "RETURN"};
     return names[node->type];
 }
 

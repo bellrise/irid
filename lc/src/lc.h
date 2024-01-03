@@ -56,6 +56,7 @@ enum tok_type
     TOK_KW_LET,    /* "let" */
     TOK_KW_IF,     /* "if" */
     TOK_KW_ELSE,   /* "else" */
+    TOK_KW_RETURN, /* "return" */
     TOK_SEMICOLON, /* ; */
     TOK_COLON,     /* : */
     TOK_LBRACE,    /* { */
@@ -147,6 +148,7 @@ void *type_alloc(struct type_register *, int type_kind);
 void type_dump(struct type *);
 const char *type_kind_name(int type_kind);
 const char *type_repr(struct type *);
+bool type_is_null(struct type *);
 int type_size(struct type *);
 
 struct type *type_register_resolve(struct type_register *, const char *name);
@@ -215,7 +217,8 @@ enum node_type
     NODE_CMPNEQ,
     NODE_CALL,
     NODE_LABEL,
-    NODE_LITERAL
+    NODE_LITERAL,
+    NODE_RETURN
 };
 
 /* The result of parsing is a tree of nodes. */
@@ -313,14 +316,18 @@ enum block_type
     BLOCK_NULL,
     BLOCK_FILE,
     BLOCK_FUNC,
-    BLOCK_FUNC_PREAMBLE,
-    BLOCK_FUNC_EPILOGUE,
+    BLOCK_PREAMBLE,
+    BLOCK_EPILOGUE,
     BLOCK_LOCAL,
     BLOCK_STORE,
+    BLOCK_STORE_RETURN,
+    BLOCK_STORE_RESULT,
     BLOCK_LOAD,
     BLOCK_STRING,
     BLOCK_CALL,
     BLOCK_ASM,
+    BLOCK_JMP,
+    BLOCK_LABEL,
 };
 
 /* The result of compilation is a (almost) flat tree of blocks. */
@@ -350,6 +357,8 @@ struct block_func
     struct local **locals;
     int n_locals;
     int emit_locals_size;
+    struct type *return_type;
+    int result_index;
 };
 
 struct block_local
@@ -393,6 +402,7 @@ struct op_value
 
 enum value_type
 {
+    VALUE_NULL,
     VALUE_IMMEDIATE,
     VALUE_LOCAL,
     VALUE_LABEL,
@@ -445,6 +455,18 @@ struct block_asm
     char *source;
 };
 
+struct block_jmp
+{
+    struct block head;
+    char *dest;
+};
+
+struct block_label
+{
+    struct block head;
+    char *label;
+};
+
 void *block_alloc(struct block *parent, int type);
 void block_add_child(struct block *parent, struct block *child);
 void block_insert_first_child(struct block *parent, struct block *child);
@@ -455,6 +477,15 @@ void block_tree_dump(struct block *);
 
 /* -- compiler.c -- */
 
+struct func_sig
+{
+    char *name;
+    struct type **param_types;
+    int n_params;
+    struct type *return_type;
+    struct node_func_decl *decl;
+};
+
 struct compiler
 {
     struct node *tree;
@@ -463,6 +494,8 @@ struct compiler
     struct tokens *tokens;
     struct block_string **strings;
     struct options *opts;
+    struct func_sig **funcs;
+    int n_funcs;
     int n_strings;
 };
 
