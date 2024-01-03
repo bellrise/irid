@@ -21,6 +21,9 @@ void *node_alloc(struct node *parent, int type)
     case NODE_VAR_DECL:
         alloc_size = sizeof(struct node_var_decl);
         break;
+    case NODE_TYPE_DECL:
+        alloc_size = sizeof(struct node_type_decl);
+        break;
     case NODE_LABEL:
         alloc_size = sizeof(struct node_label);
         break;
@@ -111,6 +114,18 @@ static void literal_info(struct node_literal *self)
     printf("\033[0m");
 }
 
+static void type_decl_info(struct node_type_decl *self)
+{
+    printf(" \033[31m%s\033[0m { ", self->typename);
+
+    for (int i = 0; i < self->n_fields; i++) {
+        parsed_type_dump_inline(self->fields[i]->parsed_type);
+        printf(" %s; ", self->fields[i]->name);
+    }
+
+    printf("}");
+}
+
 static void node_tree_dump_level(struct node *node, int level)
 {
     for (int i = 0; i < level; i++)
@@ -133,6 +148,9 @@ static void node_tree_dump_level(struct node *node, int level)
         break;
     case NODE_LITERAL:
         literal_info(((struct node_literal *) node));
+        break;
+    case NODE_TYPE_DECL:
+        type_decl_info((struct node_type_decl *) node);
         break;
     };
 

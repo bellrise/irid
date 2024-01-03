@@ -533,6 +533,87 @@ static void parse_func(struct parser *self, struct node *parent)
     parse_func_body(self, def);
 }
 
+static void type_decl_add_field(struct node_type_decl *self,
+                                struct parsed_type *parsed_type, char *name)
+{
+    struct type_field *field;
+
+    field = ac_alloc(global_ac, sizeof(*field));
+    self->fields =
+        ac_realloc(global_ac, self->fields,
+                   sizeof(struct type_field *) * (self->n_fields + 1));
+
+    field->name = name;
+    field->parsed_type = parsed_type;
+
+    self->fields[self->n_fields++] = field;
+}
+
+static void parse_type_decl_body(struct parser *self,
+                                 struct node_type_decl *type_decl)
+{
+    struct parsed_type *field_type;
+    struct tok *tok;
+
+    tok = tokcur(self);
+
+    while (1) {
+        if (tok->type == TOK_RBRACE)
+            break;
+
+        /* Type of field. */
+
+        if (tok->type != TOK_SYM)
+            pe(self, tok, "expected type of field");
+
+        field_type = parse_type(self);
+
+        /* Name of field. */
+
+        tok = toknext(self);
+        if (tok->type != TOK_SYM)
+            pe(self, tok, "expected name of field");
+
+        type_decl_add_field(type_decl, field_type,
+                            string_copy(tok->pos, tok->len));
+
+        tok = toknext(self);
+        if (tok->type == TOK_RBRACE)
+            break;
+
+        if (tok->type != TOK_SEMICOLON)
+            pef(self, tok, ";", "expected a semicolon after a field");
+
+        tok = toknext(self);
+    }
+}
+
+static void parse_type_decl(struct parser *self, struct node *parent)
+{
+    struct node_type_decl *type_decl;
+    struct tok *tok;
+
+    tok = tokcur(self);
+    if (tok->type != TOK_KW_TYPE)
+        pef(self, tok, "type", "expected type keyword");
+
+    tok = toknext(self);
+    if (tok->type != TOK_SYM)
+        pe(self, tok, "expected type name");
+
+    type_decl = node_alloc(parent, NODE_TYPE_DECL);
+    type_decl->typename = string_copy(tok->pos, tok->len);
+    type_decl->head.place = tok;
+
+    tok = toknext(self);
+    if (tok->type != TOK_LBRACE)
+        pef(self, tok, "{", "expected opening brace");
+
+    tok = toknext(self);
+
+    parse_type_decl_body(self, type_decl);
+}
+
 void parser_parse(struct parser *self)
 {
     struct tok *tok;
@@ -549,6 +630,9 @@ void parser_parse(struct parser *self)
         switch (tok->type) {
         case TOK_KW_FUNC:
             parse_func(self, self->tree);
+            break;
+        case TOK_KW_TYPE:
+            parse_type_decl(self, self->tree);
             break;
         default:
             peh(self, tok, "expected a top-level declaration, like a function",

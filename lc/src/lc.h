@@ -116,6 +116,7 @@ enum type_type
     TYPE_NULL,
     TYPE_INTEGER,
     TYPE_POINTER,
+    TYPE_STRUCT,
 };
 
 /* Information about a type, like its bitwidth. */
@@ -138,6 +139,14 @@ struct type_pointer
     struct type *base_type;
 };
 
+struct type_struct
+{
+    struct type head;
+    struct type **field_types;
+    char **field_names;
+    int n_fields;
+};
+
 struct type_register
 {
     struct type **types;
@@ -154,6 +163,9 @@ int type_size(struct type *);
 struct type *type_register_resolve(struct type_register *, const char *name);
 struct type_pointer *type_register_add_pointer(struct type_register *,
                                                struct type *base_type);
+
+struct type_struct *type_register_alloc_struct(struct type_register *,
+                                               const char *name);
 
 /* Parsed types are the result of the parser, and do not check for any validity,
    which is done in the compiler. */
@@ -255,6 +267,20 @@ struct node_func_def
 {
     struct node head;
     struct node_func_decl *decl;
+};
+
+struct type_field
+{
+    struct parsed_type *parsed_type;
+    char *name;
+};
+
+struct node_type_decl
+{
+    struct node head;
+    char *typename;
+    struct type_field **fields;
+    int n_fields;
 };
 
 struct node_var_decl

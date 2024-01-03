@@ -19,6 +19,9 @@ void *type_alloc(struct type_register *self, int kind)
     case TYPE_POINTER:
         alloc_size = sizeof(struct type_pointer);
         break;
+    case TYPE_STRUCT:
+        alloc_size = sizeof(struct type_struct);
+        break;
     default:
         alloc_size = sizeof(struct type);
         break;
@@ -36,6 +39,8 @@ void *type_alloc(struct type_register *self, int kind)
 
 void type_dump_level(struct type *self, int level)
 {
+    struct type_struct *struct_type;
+
     for (int i = 0; i < level; i++)
         fputs("  ", stdout);
 
@@ -48,6 +53,12 @@ void type_dump_level(struct type *self, int level)
     case TYPE_POINTER:
         printf("&\n");
         type_dump_level(((struct type_pointer *) self)->base_type, level + 1);
+        break;
+    case TYPE_STRUCT:
+        printf("\033[31mtype %s\033[0m\n", self->name);
+        struct_type = (struct type_struct *) self;
+        for (int i = 0; i < struct_type->n_fields; i++)
+            type_dump_level(struct_type->field_types[i], level + 1);
         break;
     default:
         fputc('\n', stdout);

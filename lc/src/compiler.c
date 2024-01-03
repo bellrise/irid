@@ -588,6 +588,23 @@ static void compile_func_decl(struct compiler *self,
     }
 }
 
+static void compile_type_decl(struct compiler *self,
+                              struct node_type_decl *type_decl)
+{
+    struct type_struct *type;
+    void *thing;
+
+    thing = type_register_resolve(self->types, type_decl->typename);
+    if (thing) {
+        ce(self, type_decl->head.place, "%s is already defined as a type",
+           type_decl->typename);
+    }
+
+    type = type_register_alloc_struct(self->types, type_decl->typename);
+    // todo finish declaring type
+    //      implement type_register_alloc_struct
+}
+
 void compiler_compile(struct compiler *self)
 {
     struct node *func_walker;
@@ -601,12 +618,14 @@ void compiler_compile(struct compiler *self)
 
     add_builtin_types(self);
 
-    /* First, collect all function declarations. */
+    /* First, collect all function & type declarations. */
 
     func_walker = self->tree->child;
     while (func_walker) {
         if (func_walker->type == NODE_FUNC_DECL)
             compile_func_decl(self, (struct node_func_decl *) func_walker);
+        if (func_walker->type == NODE_TYPE_DECL)
+            compile_type_decl(self, (struct node_type_decl *) func_walker);
         func_walker = func_walker->next;
     }
 
@@ -616,7 +635,6 @@ void compiler_compile(struct compiler *self)
     while (func_walker) {
         if (func_walker->type == NODE_FUNC_DEF)
             compile_func(self, (struct node_func_def *) func_walker);
-
         func_walker = func_walker->next;
     }
 
