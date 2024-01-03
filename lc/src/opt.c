@@ -20,6 +20,21 @@ void opt_set_defaults(struct options *opts)
     opts->output = NULL;
     opts->input = NULL;
     opts->set_origin = false;
+
+    opts->w_unused_var = true;
+}
+
+static void warn_opt(struct options *opts, const char *name)
+{
+    bool set_mode = true;
+
+    if (!strncmp(name, "no-", 3)) {
+        name += 3;
+        set_mode = false;
+    }
+
+    if (!strcmp(name, "unused-var"))
+        opts->w_unused_var = set_mode;
 }
 
 void opt_parse(struct options *opts, int argc, char **argv)
@@ -36,7 +51,7 @@ void opt_parse(struct options *opts, int argc, char **argv)
     opt_index = 0;
 
     while (1) {
-        c = getopt_long(argc, argv, "hg:o:v", long_opts, &opt_index);
+        c = getopt_long(argc, argv, "hg:o:vW:", long_opts, &opt_index);
         if (c == -1)
             break;
 
@@ -54,6 +69,9 @@ void opt_parse(struct options *opts, int argc, char **argv)
         case 'v':
             printf("irid-lc %d.%d\n", LC_VER_MAJ, LC_VER_MIN);
             exit(0);
+        case 'W':
+            warn_opt(opts, optarg);
+            break;
         }
     }
 
@@ -74,7 +92,8 @@ void usage()
            "  -h, --help            show this usage page\n"
            "  -g, --origin ORIGIN   set the origin of the code section\n"
            "  -o, --output OUTPUT   select output file\n"
-           "  -v, --version         show the version and exit\n");
+           "  -v, --version         show the version and exit\n"
+           "  -Wunused-var          unused variables\n");
 }
 
 void opt_add_missing_opts(struct options *opts)

@@ -18,6 +18,15 @@ static void ce(struct compiler *self, struct tok *place, const char *fmt, ...)
     exit(1);
 }
 
+static void cw(struct compiler *self, struct tok *place, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    source_error(self->tokens, place->pos, place->len, 0, NULL, NULL, "warning",
+                 "\033[35m", fmt, args);
+    va_end(args);
+}
+
 static void ceh(struct compiler *self, struct tok *place, const char *help_msg,
                 const char *fmt, ...)
 {
@@ -135,6 +144,9 @@ static void convert_node_into_value(struct compiler *self,
                                     struct block_func *func,
                                     struct value *value, struct node *node)
 {
+    struct node *left;
+    struct node *right;
+
     if (node->type == NODE_LITERAL) {
         convert_literal_into_value(self, value, (struct node_literal *) node);
     }
@@ -143,9 +155,28 @@ static void convert_node_into_value(struct compiler *self,
         value->value_type = VALUE_LOCAL;
         value->local_value =
             find_local(func, ((struct node_label *) node)->name);
+        value->local_value->used = true;
 
         if (!value->local_value)
             ce(self, node->place, "undeclared variable");
+    }
+
+    else if (node->type == NODE_ADD) {
+        value->value_type = VALUE_OP;
+
+        left = node->child;
+        if (!left)
+            ce(self, node->place, "missing left-hand value");
+        right = left->next;
+        if (!right)
+            ce(self, node->place, "missing right-hand value");
+
+        value->op_value.type = OP_ADD;
+        value->op_value.left = ac_alloc(global_ac, sizeof(struct value));
+        value->op_value.right = ac_alloc(global_ac, sizeof(struct value));
+
+        convert_node_into_value(self, func, value->op_value.left, left);
+        convert_node_into_value(self, func, value->op_value.right, right);
     }
 
     else {
@@ -159,7 +190,6 @@ static void compile_assign(struct compiler *self, struct block_func *func,
     struct local *local;
     struct node_label *var;
     struct node *possible_value;
-    struct node_literal *literal;
     struct block_store *store_block;
 
     var = (struct node_label *) assign_node->child;
@@ -171,15 +201,7 @@ static void compile_assign(struct compiler *self, struct block_func *func,
     local = find_local(func, var->name);
     if (!local)
         ce(self, var->head.place, "undeclared variable");
-
-    possible_value = var->head.next;
-    if (possible_value->type != NODE_LITERAL)
-        ce(self, possible_value->place, "can only assign literal values");
-
-    /* Check if we can assign the value to the variable. */
-
-    literal = (struct node_literal *) possible_value;
-    check_compat_assign(self, local, literal);
+    local->used = true;
 
     /* Create a new BLOCK_STORE instruction, but don't assign it to the parent
        just yet - converting a node into a value may take more steps than just
@@ -188,10 +210,15 @@ static void compile_assign(struct compiler *self, struct block_func *func,
     store_block = block_alloc(NULL, BLOCK_STORE);
     store_block->var = local;
 
-    /* Convert the value node into a `struct value`. */
+    possible_value = var->head.next;
+    convert_node_into_value(self, func, &store_block->value, possible_value);
 
-    convert_node_into_value(self, func, &store_block->value,
-                            (struct node *) literal);
+    /* Check if we can assign the value to the variable. */
+
+    // TODO: add this back
+    // check_compat_assign(self, local, literal);
+
+    /* Convert the value node into a `struct value`. */
 
     block_add_child((struct block *) func, (struct block *) store_block);
 }
@@ -263,8 +290,6 @@ static void validate_call_args(struct compiler *self,
                                struct block_call *call_block,
                                struct node_func_decl *decl)
 {
-    struct value *arg;
-
     if (call_block->n_args < decl->n_params) {
         ce(self, call_node->call_end_place,
            "missing '%s' argument for function",
@@ -368,6 +393,18 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
 
     if (!(func->decl->attrs.flags & ATTR_NAKED))
         block_alloc((struct block *) func_block, BLOCK_FUNC_EPILOGUE);
+
+    /* Walk through the locals to check if there are any unused variables. */
+
+    if (self->opts->w_unused_var) {
+        for (int i = 0; i < func_block->n_locals; i++) {
+            if (func_block->locals[i]->used)
+                continue;
+
+            cw(self, func_block->locals[i]->decl->head.place,
+               "unused variable");
+        }
+    }
 }
 
 static void add_builtin_types(struct compiler *self)

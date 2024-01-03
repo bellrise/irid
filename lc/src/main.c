@@ -41,6 +41,7 @@ int main(int argc, char **argv)
     compiler.tree = parser->tree;
     compiler.file_block = NULL;
     compiler.tokens = tokens;
+    compiler.opts = &opts;
     compiler_compile(&compiler);
 
     emitter.file_block = compiler.file_block;

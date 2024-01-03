@@ -211,9 +211,7 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent);
 
 static void parse_call_args(struct parser *self, struct node *call)
 {
-    struct node *arg;
     struct tok *tok;
-    struct tok *start_tok;
 
     tok = tokcur(self);
 
@@ -221,9 +219,7 @@ static void parse_call_args(struct parser *self, struct node *call)
         if (tok->type == TOK_RPAREN)
             break;
 
-        start_tok = tok;
         node_add_child(call, parse_expr_inside(self, call));
-        tok = tokcur(self);
 
         tok = toknext(self);
         if (tok->type == TOK_RPAREN)

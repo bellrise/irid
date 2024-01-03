@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #define LC_VER_MAJ 0
-#define LC_VER_MIN 1
+#define LC_VER_MIN 2
 
 struct allocator;
 extern struct allocator *global_ac;
@@ -24,6 +24,8 @@ struct options
     char *input;
     bool set_origin;
     int origin;
+
+    bool w_unused_var;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -337,6 +339,7 @@ struct local
     struct node_var_decl *decl;
     struct block_local *local_block;
     char *name;
+    bool used;
 };
 
 struct block_func
@@ -371,12 +374,30 @@ struct imm
     int value;
 };
 
+enum op_type
+{
+    OP_ADD,
+    OP_SUB,
+    OP_MUL,
+    OP_DIV,
+    OP_CMPEQ,
+    OP_CMPNEQ
+};
+
+struct op_value
+{
+    int type;
+    struct value *left;
+    struct value *right;
+};
+
 enum value_type
 {
     VALUE_IMMEDIATE,
     VALUE_LOCAL,
     VALUE_LABEL,
     VALUE_STRING,
+    VALUE_OP,
 };
 
 /* A value can either be an immediate integer value, reference to another
@@ -392,6 +413,7 @@ struct value
         struct local *local_value;
         char *label_value;
         int string_id_value;
+        struct op_value op_value;
     };
 };
 
@@ -440,6 +462,7 @@ struct compiler
     struct type_register *types;
     struct tokens *tokens;
     struct block_string **strings;
+    struct options *opts;
     int n_strings;
 };
 

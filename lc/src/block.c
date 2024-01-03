@@ -113,11 +113,16 @@ static void value_inline(struct value *val)
         printf("local(%s)", val->local_value->name);
     if (val->value_type == VALUE_LABEL)
         printf("label(%s)", val->label_value);
+    if (val->value_type == VALUE_OP) {
+        value_inline(val->op_value.left);
+        printf(" OP ");
+        value_inline(val->op_value.right);
+    }
 }
 
 static void store_info(struct block_store *self)
 {
-    printf(" %s ", self->var->name);
+    printf(" %s = ", self->var->name);
     value_inline(&self->value);
 }
 
