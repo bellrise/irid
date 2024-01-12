@@ -45,6 +45,7 @@ int main(int argc, char **argv)
     compiler_compile(&compiler);
 
     emitter.file_block = compiler.file_block;
+    emitter.opts = &opts;
     emitter_emit(&emitter, &opts);
 
     fclose(emitter.out);

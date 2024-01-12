@@ -33,6 +33,9 @@ void *node_alloc(struct node *parent, int type)
     case NODE_CALL:
         alloc_size = sizeof(struct node_call);
         break;
+    case NODE_FIELD:
+        alloc_size = sizeof(struct node_field);
+        break;
     default:
         alloc_size = sizeof(struct node);
     }
@@ -65,10 +68,11 @@ void node_add_child(struct node *parent, struct node *child)
 
 const char *node_name(struct node *node)
 {
-    const char *names[] = {
-        "NULL",   "FILE",   "FUNC_DECL", "FUNC_DEF", "TYPE_DECL", "VAR_DECL",
-        "ASSIGN", "ADD",    "SUB",       "MUL",      "DIV",       "MOD",
-        "CMPEQ",  "CMPNEQ", "CALL",      "LABEL",    "LITERAL",   "RETURN"};
+    const char *names[] = {"NULL",      "FILE",     "FUNC_DECL", "FUNC_DEF",
+                           "TYPE_DECL", "VAR_DECL", "ASSIGN",    "ADD",
+                           "SUB",       "MUL",      "DIV",       "MOD",
+                           "CMPEQ",     "CMPNEQ",   "CALL",      "LABEL",
+                           "LITERAL",   "RETURN",   "FIELD",     "IF"};
     return names[node->type];
 }
 

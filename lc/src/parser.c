@@ -241,11 +241,10 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
        a snippet from the grammar file:
 
     expr:
-        | '(' expr ')'
-        | expr ( '+' | '-' | '*' | '/' | '%' ) expr
-        | expr ( '==' | '!=' ) expr
-        | expr '(' [ expr [ ',' expr ]* ] ')'
-        | expr '=' expr
+        | '(' ( expr | assign | math-op ) ')'
+        | expr '(' [ expr ( ',' expr )* ] ')'
+        | expr '.' symbol
+        | '&' symbol
         | symbol
         | literal
     */
@@ -258,12 +257,13 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
     struct node *right_expr;
     struct tok *tok;
     struct tok *tmptok;
+    struct tok *virtual_tok;
     int node_type;
     char *tmpstr;
 
     tok = tokcur(self);
 
-    /* '(' expr ')' */
+    /* '(' ( expr | assign | math-op ) ')' */
 
     if (tok->type == TOK_LPAREN) {
         toknext(self);
@@ -301,12 +301,17 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
         left_expr = (struct node *) literal_node;
     }
 
+    // TODO: add &addr operator
+
+    else {
+        pe(self, tok, "invalid expression");
+    }
+
     /* Now, the complicated part starts. We have to check for any operators
        after the first value. This means that the expression at hand is a
        complex expression which is either a two-hand operation, or a call. */
 
     tok = tokpeek(self);
-    tmptok = tok;
 
     /* expr '(' ... ')' */
 
@@ -321,40 +326,54 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
             - ...
          */
 
+        virtual_tok = ac_alloc(global_ac, sizeof(*virtual_tok));
+        virtual_tok->pos = left_expr->place->pos;
+
         expr = node_alloc(NULL, NODE_CALL);
-        expr->place = tmptok;
+        expr->place = virtual_tok;
         node_add_child(expr, left_expr);
         parse_call_args(self, expr);
 
         ((struct node_call *) expr)->call_end_place = tokcur(self);
 
+        virtual_tok->len =
+            (tokcur(self)->pos - virtual_tok->pos) + tokcur(self)->len;
+
         left_expr = expr;
     }
 
     tok = tokpeek(self);
-    tmptok = tok;
 
-    /* expr '=' expr */
-
-    if (tok->type == TOK_EQ) {
+    if (tok->type == TOK_DOT) {
         tok = toknext(self);
         tok = toknext(self);
 
-        /* node_assign:
-            - left_expr (value to add to)
-            - right_expr (expression to add)
-         */
+        /* node_field:
+            - expr
+            - symbol
+        */
 
-        expr = node_alloc(NULL, NODE_ASSIGN);
-        expr->place = tmptok;
+        virtual_tok = ac_alloc(global_ac, sizeof(*virtual_tok));
+        virtual_tok->pos = left_expr->place->pos;
 
-        right_expr = parse_expr_inside(self, expr);
-
+        expr = node_alloc(NULL, NODE_FIELD);
+        expr->place = virtual_tok;
         node_add_child(expr, left_expr);
-        node_add_child(expr, right_expr);
 
-        return expr;
+        if (tok->type != TOK_SYM)
+            pe(self, tok, "expected field name after operator");
+
+        ((struct node_field *) expr)->field_tok = tok;
+
+        right_expr = node_alloc(expr, NODE_LABEL);
+        ((struct node_label *) right_expr)->name =
+            string_copy(tok->pos, tok->len);
+
+        virtual_tok->len = (tok->pos - virtual_tok->pos) + tok->len;
+        left_expr = expr;
     }
+
+    tok = tokpeek(self);
 
     /* expr ( '+' | '-' | '*' | '/' | '%' | '==' | '!=' ) expr */
 
@@ -376,6 +395,7 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
         node_type = NODE_CMPNEQ;
 
     if (node_type != NODE_NULL) {
+        tmptok = tok;
         tok = toknext(self);
         tok = toknext(self);
 
@@ -391,6 +411,36 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
 
         node_add_child(expr, left_expr);
         node_add_child(expr, right_expr);
+
+        left_expr = expr;
+    }
+
+    tok = tokpeek(self);
+
+    /* expr '=' expr */
+
+    if (tok->type == TOK_EQ) {
+        tok = toknext(self);
+        tok = toknext(self);
+
+        /* node_assign:
+            - left_expr (value to add to)
+            - right_expr (expression to add)
+         */
+
+        virtual_tok = ac_alloc(global_ac, sizeof(*virtual_tok));
+        virtual_tok->pos = left_expr->place->pos;
+
+        expr = node_alloc(NULL, NODE_ASSIGN);
+        expr->place = virtual_tok;
+
+        right_expr = parse_expr_inside(self, expr);
+
+        node_add_child(expr, left_expr);
+        node_add_child(expr, right_expr);
+
+        virtual_tok->len =
+            (tokcur(self)->pos - virtual_tok->pos) + tokcur(self)->len;
 
         return expr;
     }
@@ -422,7 +472,34 @@ static void parse_return(struct parser *self, struct node *parent)
     parse_expr(self, return_node);
 }
 
-static void parse_func_body(struct parser *self, struct node_func_def *func_def)
+static void parse_block(struct parser *self, struct node *func_def);
+
+static void parse_if(struct parser *self, struct node *parent)
+{
+    struct node *if_node;
+    struct tok *tok;
+
+    tok = tokcur(self);
+    if (tok->type != TOK_KW_IF)
+        pef(self, tok, "if", "expected if keyword");
+
+    if_node = node_alloc(parent, NODE_IF);
+    if_node->place = tok;
+
+    tok = toknext(self);
+    if (tok->type != TOK_LPAREN)
+        pef(self, tok, "(", "expected opening parenthesis");
+
+    parse_expr(self, if_node);
+
+    tok = toknext(self);
+    if (tok->type != TOK_LBRACE)
+        pef(self, tok, "{", "expected closing brace");
+
+    parse_block(self, if_node);
+}
+
+static void parse_block(struct parser *self, struct node *parent)
 {
     struct tok *tok;
 
@@ -433,13 +510,16 @@ static void parse_func_body(struct parser *self, struct node_func_def *func_def)
         case TOK_RBRACE:
             return;
         case TOK_KW_LET:
-            parse_var_decl(self, (struct node *) func_def);
+            parse_var_decl(self, parent);
             break;
         case TOK_KW_RETURN:
-            parse_return(self, (struct node *) func_def);
+            parse_return(self, parent);
+            break;
+        case TOK_KW_IF:
+            parse_if(self, parent);
             break;
         default:
-            parse_expr(self, (struct node *) func_def);
+            parse_expr(self, parent);
             break;
         }
 
@@ -530,7 +610,7 @@ static void parse_func(struct parser *self, struct node *parent)
     def->head.place = tok;
     def->decl = decl;
 
-    parse_func_body(self, def);
+    parse_block(self, (struct node *) def);
 }
 
 static void type_decl_add_field(struct node_type_decl *self,

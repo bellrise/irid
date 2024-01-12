@@ -8,13 +8,14 @@
 static void store_value_into_register(struct emitter *self, int register_id,
                                       struct value *value);
 static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct block_local *local);
+                                      struct block_local *local, int offset);
 
 static void emit_func_preamble(struct emitter *self, struct block_func *func)
 {
     fprintf(self->out, "    push bp\n");
     fprintf(self->out, "    push r4\n");
     fprintf(self->out, "    push r5\n");
+    fprintf(self->out, "    push r6\n");
     fprintf(self->out, "    mov bp, sp\n");
     func->emit_locals_size = 0;
 }
@@ -22,6 +23,7 @@ static void emit_func_preamble(struct emitter *self, struct block_func *func)
 static void emit_func_epilogue(struct emitter *self)
 {
     fprintf(self->out, "    mov sp, bp\n");
+    fprintf(self->out, "    pop r6\n");
     fprintf(self->out, "    pop r5\n");
     fprintf(self->out, "    pop r4\n");
     fprintf(self->out, "    pop bp\n");
@@ -106,12 +108,14 @@ static void store_value_into_register(struct emitter *self, int register_id,
     else if (value->value_type == VALUE_LOCAL) {
         fprintf(self->out, "    mov r4, bp\n");
         fprintf(self->out, "    sub r4, %d\n",
-                value->local_value->local_block->emit_offset);
+                value->local_value->local_block->emit_offset
+                    + value->local_offset);
         fprintf(self->out, "    load %s, r4\n", register_name(register_id));
     }
 
     else if (value->value_type == VALUE_STRING) {
-        fprintf(self->out, "    mov r4, _S_%d\n", value->string_id_value);
+        fprintf(self->out, "    mov %s, _S_%d\n", register_name(register_id),
+                value->string_id_value);
     }
 
     else if (value->value_type == VALUE_OP) {
@@ -124,23 +128,34 @@ static void store_value_into_register(struct emitter *self, int register_id,
 }
 
 static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct block_local *local)
+                                      struct block_local *local, int offset)
 {
     fprintf(self->out, "    mov r4, bp\n");
-    fprintf(self->out, "    sub r4, %d\n", local->emit_offset);
+    fprintf(self->out, "    sub r4, %d\n", local->emit_offset + offset);
     fprintf(self->out, "    store %s, r4\n", register_name(register_id));
 }
 
 static void emit_store(struct emitter *self, struct block_store *store)
 {
+    if (self->opts->f_comment_asm)
+        fprintf(self->out, "    ; store %s\n", store->var->name);
+
     store_value_into_register(self, R_R5, &store->value);
-    store_register_into_local(self, R_R5, store->var->local_block);
+    store_register_into_local(self, R_R5, store->var->local_block,
+                              store->store_offset);
 }
 
 static void emit_call(struct emitter *self, struct block_call *func)
 {
-    for (int i = 0; i < func->n_args; i++)
+    if (self->opts->f_comment_asm)
+        fprintf(self->out, "    ; call %s\n", func->call_name);
+
+    for (int i = 0; i < func->n_args; i++) {
+        if (self->opts->f_comment_asm)
+            fprintf(self->out, "    ; call-arg %d\n", i);
         store_value_into_register(self, R_R0 + i, &func->args[i]);
+    }
+
     fprintf(self->out, "    call %s\n", func->call_name);
 }
 
@@ -156,7 +171,21 @@ static void emit_label(struct emitter *self, struct block_label *label)
 
 static void emit_jmp(struct emitter *self, struct block_jmp *jmp)
 {
-    fprintf(self->out, "    jmp @%s\n", jmp->dest);
+    if (jmp->type == JMP_ALWAYS)
+        fprintf(self->out, "    jmp @%s\n", jmp->dest);
+
+    if (jmp->type == JMP_EQ)
+        fprintf(self->out, "    jeq @%s\n", jmp->dest);
+}
+
+static void emit_cmp(struct emitter *self, struct block_cmp *cmp)
+{
+    if (self->opts->f_comment_asm)
+        fprintf(self->out, "    ; cmp\n");
+
+    store_value_into_register(self, R_R5, &cmp->left);
+    store_value_into_register(self, R_R6, &cmp->right);
+    fprintf(self->out, "    cmp r5, r6\n");
 }
 
 static void emit_store_return(struct emitter *self,
@@ -168,14 +197,15 @@ static void emit_store_return(struct emitter *self,
 static void emit_store_result(struct emitter *self,
                               struct block_store *store_return)
 {
-    store_register_into_local(self, R_R0, store_return->var->local_block);
+    store_register_into_local(self, R_R0, store_return->var->local_block,
+                              store_return->store_offset);
 }
 
 static void emit_store_arg(struct emitter *self,
                            struct block_store_arg *store_arg)
 {
     store_register_into_local(self, R_R0 + store_arg->arg,
-                              store_arg->local->local_block);
+                              store_arg->local->local_block, 0);
 }
 
 static void emit_func(struct emitter *self, struct block_func *func)
@@ -224,6 +254,9 @@ static void emit_func(struct emitter *self, struct block_func *func)
         case BLOCK_STORE_ARG:
             emit_store_arg(self, (struct block_store_arg *) block);
             break;
+        case BLOCK_CMP:
+            emit_cmp(self, (struct block_cmp *) block);
+            break;
         default:
             die("don't know how to emit %s", block_name(block));
         }
@@ -232,6 +265,12 @@ static void emit_func(struct emitter *self, struct block_func *func)
     }
 
     fprintf(self->out, "    ret\n");
+}
+
+static void emit_string(struct emitter *self, struct block_string *string)
+{
+    fprintf(self->out, "_S_%d:\n", string->string_id);
+    fprintf(self->out, ".string \"%s\"\n", string->value);
 }
 
 void emitter_emit(struct emitter *self, struct options *opts)
@@ -252,10 +291,17 @@ void emitter_emit(struct emitter *self, struct options *opts)
 
     block = self->file_block->child;
     while (block) {
-        if (block->type != BLOCK_FUNC)
-            die("only BLOCK_FUNC allowed at file top-level");
+        switch (block->type) {
+        case BLOCK_FUNC:
+            emit_func(self, (struct block_func *) block);
+            break;
+        case BLOCK_STRING:
+            emit_string(self, (struct block_string *) block);
+            break;
+        default:
+            die("unexpected block: %s", block_name(block));
+        }
 
-        emit_func(self, (struct block_func *) block);
         block = block->next;
     }
 }

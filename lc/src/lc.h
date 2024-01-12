@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #define LC_VER_MAJ 0
-#define LC_VER_MIN 2
+#define LC_VER_MIN 4
 
 struct allocator;
 extern struct allocator *global_ac;
@@ -26,6 +26,8 @@ struct options
     int origin;
 
     bool w_unused_var;
+
+    bool f_comment_asm;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -159,11 +161,14 @@ const char *type_kind_name(int type_kind);
 const char *type_repr(struct type *);
 bool type_is_null(struct type *);
 int type_size(struct type *);
+void type_struct_add_field(struct type_struct *, struct type *type,
+                           const char *name);
+struct type *type_struct_find_field(struct type_struct *, const char *name);
+int type_struct_field_offset(struct type_struct *, const char *name);
 
 struct type *type_register_resolve(struct type_register *, const char *name);
 struct type_pointer *type_register_add_pointer(struct type_register *,
                                                struct type *base_type);
-
 struct type_struct *type_register_alloc_struct(struct type_register *,
                                                const char *name);
 
@@ -230,7 +235,9 @@ enum node_type
     NODE_CALL,
     NODE_LABEL,
     NODE_LITERAL,
-    NODE_RETURN
+    NODE_RETURN,
+    NODE_FIELD,
+    NODE_IF,
 };
 
 /* The result of parsing is a tree of nodes. */
@@ -319,6 +326,12 @@ struct node_literal
     };
 };
 
+struct node_field
+{
+    struct node head;
+    struct tok *field_tok;
+};
+
 void *node_alloc(struct node *parent, int type);
 void node_add_child(struct node *parent, struct node *child);
 const char *node_name(struct node *);
@@ -355,6 +368,7 @@ enum block_type
     BLOCK_ASM,
     BLOCK_JMP,
     BLOCK_LABEL,
+    BLOCK_CMP,
 };
 
 /* The result of compilation is a (almost) flat tree of blocks. */
@@ -386,6 +400,7 @@ struct block_func
     int emit_locals_size;
     struct type *return_type;
     int var_index;
+    int label_index;
 };
 
 struct block_local
@@ -444,6 +459,7 @@ struct value
 {
     int value_type;
     struct tok *place;
+    int local_offset;
     union
     {
         struct imm imm_value;
@@ -459,6 +475,7 @@ struct block_store
     struct block head;
     struct local *var;
     struct value value;
+    int store_offset;
 };
 
 struct block_string
@@ -482,10 +499,17 @@ struct block_asm
     char *source;
 };
 
+enum jmp_type
+{
+    JMP_ALWAYS,
+    JMP_EQ,
+};
+
 struct block_jmp
 {
     struct block head;
     char *dest;
+    int type;
 };
 
 struct block_label
@@ -499,6 +523,20 @@ struct block_store_arg
     struct block head;
     struct local *local;
     int arg;
+};
+
+enum cmp_type
+{
+    CMP_EQ,
+    CMP_NEQ,
+};
+
+struct block_cmp
+{
+    struct block head;
+    struct value left;
+    struct value right;
+    int type;
 };
 
 void *block_alloc(struct block *parent, int type);
@@ -541,6 +579,7 @@ struct emitter
 {
     FILE *out;
     struct block *file_block;
+    struct options *opts;
 };
 
 void emitter_emit(struct emitter *, struct options *opts);

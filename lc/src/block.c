@@ -42,6 +42,9 @@ void *block_alloc(struct block *parent, int type)
     case BLOCK_JMP:
         alloc_size = sizeof(struct block_jmp);
         break;
+    case BLOCK_CMP:
+        alloc_size = sizeof(struct block_cmp);
+        break;
     default:
         alloc_size = sizeof(struct block);
     }
@@ -98,10 +101,10 @@ void block_insert_next(struct block *any_block, struct block *sel_block)
 const char *block_name(struct block *block)
 {
     const char *names[] = {
-        "NULL",         "FILE_START", "FUNC",  "PREAMBLE",
-        "EPILOGUE",     "LOCAL",      "STORE", "STORE_RETURN",
-        "STORE_RESULT", "STORE_ARG",  "LOAD",  "STRING",
-        "CALL",         "ASM",        "JMP",   "LABEL"};
+        "NULL",  "FILE_START", "FUNC",         "PREAMBLE",     "EPILOGUE",
+        "LOCAL", "STORE",      "STORE_RETURN", "STORE_RESULT", "STORE_ARG",
+        "LOAD",  "STRING",     "CALL",         "ASM",          "JMP",
+        "LABEL", "CMP"};
     return names[block->type];
 }
 
@@ -124,7 +127,7 @@ static void value_inline(struct value *val)
     if (val->value_type == VALUE_STRING)
         printf("str_id(%d)", val->string_id_value);
     if (val->value_type == VALUE_LOCAL)
-        printf("local(%s)", val->local_value->name);
+        printf("local(%s +%d)", val->local_value->name, val->local_offset);
     if (val->value_type == VALUE_LABEL)
         printf("label(%s)", val->label_value);
     if (val->value_type == VALUE_OP) {
@@ -136,7 +139,7 @@ static void value_inline(struct value *val)
 
 static void store_info(struct block_store *self)
 {
-    printf(" %s = ", self->var->name);
+    printf(" %s +%d = ", self->var->name, self->store_offset);
     value_inline(&self->value);
 }
 
@@ -164,6 +167,21 @@ static void call_info(struct block_call *self)
         printf(", ");
     }
     printf(")");
+}
+
+static void jmp_info(struct block_jmp *self)
+{
+    printf(" %s", self->dest);
+    if (self->type == JMP_EQ)
+        printf(" flag");
+}
+
+static void cmp_info(struct block_cmp *self)
+{
+    printf(" ");
+    value_inline(&self->left);
+    printf(" %s ", self->type == CMP_EQ ? "==" : "!=");
+    value_inline(&self->right);
 }
 
 static void block_tree_dump_level(struct block *block, int level)
@@ -205,7 +223,10 @@ static void block_tree_dump_level(struct block *block, int level)
         printf(" %s", ((struct block_label *) block)->label);
         break;
     case BLOCK_JMP:
-        printf(" %s", ((struct block_jmp *) block)->dest);
+        jmp_info((struct block_jmp *) block);
+        break;
+    case BLOCK_CMP:
+        cmp_info((struct block_cmp *) block);
         break;
     };
 

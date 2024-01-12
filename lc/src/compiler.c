@@ -98,6 +98,9 @@ static void compile_var_decl(struct compiler *self, struct block_func *func,
 {
     struct local *local;
 
+    if (find_local(func, decl->name))
+        ce(self, decl->head.place, "%s is already declared", decl->name);
+
     local = alloc_local(func);
 
     local->type = make_real_type(self, decl->var_type);
@@ -210,6 +213,42 @@ static void convert_call_node_into_value(struct compiler *self,
     value->local_value = result_local;
 }
 
+static void convert_field_into_value(struct compiler *self,
+                                     struct block_func *func,
+                                     struct value *value, struct node *node)
+{
+    struct local *local;
+    struct type_struct *var_type;
+    struct node_label *var;
+    struct node_label *field;
+
+    value->value_type = VALUE_LOCAL;
+
+    var = (struct node_label *) node->child;
+    if (var->head.type != NODE_LABEL)
+        ce(self, var->head.place, "expected var name");
+
+    field = (struct node_label *) var->head.next;
+    if (field->head.type != NODE_LABEL)
+        ce(self, var->head.place, "missing field name");
+
+    local = find_local(func, var->name);
+    if (!local)
+        ce(self, var->head.place, "undeclared variale");
+
+    value->local_value = local;
+
+    if (local->type->type != TYPE_STRUCT)
+        ce(self, var->head.place, "cannot access field of non-struct type");
+
+    var_type = (struct type_struct *) local->type;
+
+    if (!type_struct_find_field(var_type, field->name))
+        ce(self, field->head.place, "no field named %s in struct", field->name);
+
+    value->local_offset += type_struct_field_offset(var_type, field->name);
+}
+
 static void convert_node_into_value(struct compiler *self,
                                     struct block_func *func,
                                     struct value *value, struct node *node)
@@ -231,7 +270,7 @@ static void convert_node_into_value(struct compiler *self,
         value->local_value->used = true;
     }
 
-    else if (node->type == NODE_ADD) {
+    else if (node->type == NODE_ADD || node->type == NODE_CMPEQ) {
         value->value_type = VALUE_OP;
 
         left = node->child;
@@ -241,7 +280,11 @@ static void convert_node_into_value(struct compiler *self,
         if (!right)
             ce(self, node->place, "missing right-hand value");
 
-        value->op_value.type = OP_ADD;
+        if (node->type == NODE_ADD)
+            value->op_value.type = OP_ADD;
+        if (node->type == NODE_CMPEQ)
+            value->op_value.type = OP_CMPEQ;
+
         value->op_value.left = ac_alloc(global_ac, sizeof(struct value));
         value->op_value.right = ac_alloc(global_ac, sizeof(struct value));
 
@@ -253,9 +296,65 @@ static void convert_node_into_value(struct compiler *self,
         convert_call_node_into_value(self, func, value, node);
     }
 
+    else if (node->type == NODE_FIELD) {
+        convert_field_into_value(self, func, value, node);
+    }
+
     else {
         ce(self, node->place, "cannot convert this into a value");
     }
+}
+
+static void compile_assign_field(struct compiler *self, struct block_func *func,
+                                 struct node *assign_node,
+                                 struct node_field *field_node)
+{
+    struct local *local;
+    struct node_label *var;
+    struct node_label *field;
+    struct type_struct *var_type;
+    struct block_store *store_block;
+    struct node *possible_value;
+    int offset;
+
+    var = (struct node_label *) field_node->head.child;
+    if (var->head.type == NODE_LITERAL)
+        ce(self, var->head.place, "cannot access field of literal");
+    if (var->head.type != NODE_LABEL)
+        ce(self, var->head.place, "expected a variable name");
+
+    local = find_local(func, var->name);
+    if (!local)
+        ce(self, var->head.place, "undeclared variable");
+    local->used = true;
+
+    field = (struct node_label *) var->head.next;
+    if (field->head.type != NODE_LABEL)
+        ce(self, field->head.place, "expected a field name");
+
+    /* Storing a value in a field is simply a STORE instruction with a specific
+       offset from the base pointer. */
+
+    var_type = (struct type_struct *) local->type;
+    if (var_type->head.type != TYPE_STRUCT)
+        ce(self, field_node->head.place,
+           "cannot access field of non-struct type");
+
+    if (!type_struct_find_field(var_type, field->name)) {
+        ce(self, field_node->field_tok, "no field named %s in %s", field->name,
+           var_type->head.name);
+    }
+
+    offset = type_struct_field_offset(var_type, field->name);
+
+    store_block = block_alloc(NULL, BLOCK_STORE);
+    store_block->var = local;
+    store_block->store_offset = offset;
+
+    possible_value = assign_node->child->next;
+    convert_node_into_value(self, func, &store_block->value, possible_value);
+
+    block_add_child((struct block *) func, (struct block *) store_block);
 }
 
 static void compile_assign(struct compiler *self, struct block_func *func,
@@ -269,8 +368,13 @@ static void compile_assign(struct compiler *self, struct block_func *func,
     var = (struct node_label *) assign_node->child;
     if (var->head.type == NODE_LITERAL)
         ce(self, var->head.place, "cannot assign to literal value");
-    if (var->head.type != NODE_LABEL)
-        ce(self, var->head.place, "expected a variable name");
+    if (var->head.type != NODE_LABEL && var->head.type != NODE_FIELD)
+        ce(self, var->head.place, "expected a variable or structure field");
+
+    if (var->head.type == NODE_FIELD) {
+        return compile_assign_field(self, func, assign_node,
+                                    (struct node_field *) var);
+    }
 
     local = find_local(func, var->name);
     if (!local)
@@ -440,6 +544,73 @@ static void compile_return(struct compiler *self, struct block_func *func_block,
     exit_jmp->dest = string_copy_z("E");
 }
 
+static void place_node(struct compiler *self, struct block_func *func_node,
+                       struct node *this_node);
+
+static void compile_if(struct compiler *self, struct block_func *func_block,
+                       struct node *if_node)
+{
+    struct block_jmp *jmp_yes_block;
+    struct block_jmp *jmp_no_block;
+    struct block_label *yes_label;
+    struct block_label *no_label;
+    struct block_cmp *cmp_block;
+    struct node *cmp_node;
+    struct node *left;
+    struct node *right;
+    struct node *walker;
+
+    /* Create the labels. */
+
+    yes_label = block_alloc(NULL, BLOCK_LABEL);
+    no_label = block_alloc(NULL, BLOCK_LABEL);
+
+    yes_label->label = ac_alloc(global_ac, 8);
+    no_label->label = ac_alloc(global_ac, 8);
+
+    snprintf(yes_label->label, 8, "L%d", func_block->label_index++);
+    snprintf(no_label->label, 8, "L%d", func_block->label_index++);
+
+    /* Run the comparison and store the result. */
+
+    cmp_block = block_alloc(NULL, BLOCK_CMP);
+
+    cmp_node = if_node->child;
+    if (cmp_node->type != NODE_CMPEQ && cmp_node->type != NODE_CMPNEQ)
+        ce(self, cmp_node->place, "expected comparison in if condition");
+
+    left = cmp_node->child;
+    right = left->next;
+
+    convert_node_into_value(self, func_block, &cmp_block->left, left);
+    convert_node_into_value(self, func_block, &cmp_block->right, right);
+
+    cmp_block->type = CMP_EQ;
+
+    jmp_yes_block = block_alloc(NULL, BLOCK_JMP);
+    jmp_yes_block->type = JMP_EQ;
+    jmp_yes_block->dest = yes_label->label;
+
+    jmp_no_block = block_alloc(NULL, BLOCK_JMP);
+    jmp_no_block->type = JMP_ALWAYS;
+    jmp_no_block->dest = no_label->label;
+
+    block_add_child((struct block *) func_block, (struct block *) cmp_block);
+    block_add_child((struct block *) func_block,
+                    (struct block *) jmp_yes_block);
+    block_add_child((struct block *) func_block, (struct block *) jmp_no_block);
+    block_add_child((struct block *) func_block, (struct block *) yes_label);
+
+    walker = if_node->child->next;
+
+    while (walker) {
+        place_node(self, func_block, walker);
+        walker = walker->next;
+    }
+
+    block_add_child((struct block *) func_block, (struct block *) no_label);
+}
+
 static void func_store_arguments(struct compiler *self,
                                  struct node_func_decl *func_decl,
                                  struct block_func *func_block)
@@ -459,6 +630,31 @@ static void func_store_arguments(struct compiler *self,
         store_block = block_alloc((struct block *) func_block, BLOCK_STORE_ARG);
         store_block->arg = i;
         store_block->local = arg_local;
+    }
+}
+
+static void place_node(struct compiler *self, struct block_func *func_node,
+                       struct node *this_node)
+{
+    switch (this_node->type) {
+    case NODE_VAR_DECL:
+        compile_var_decl(self, func_node, (struct node_var_decl *) this_node);
+        break;
+    case NODE_ASSIGN:
+        compile_assign(self, func_node, this_node);
+        break;
+    case NODE_CALL:
+        compile_call(self, func_node, this_node);
+        break;
+    case NODE_RETURN:
+        compile_return(self, func_node, this_node);
+        break;
+    case NODE_IF:
+        compile_if(self, func_node, this_node);
+        break;
+    default:
+        ceh(self, this_node->place, "tip: dunno how to compile this",
+            "invalid place for this expression");
     }
 }
 
@@ -482,26 +678,7 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
 
     node_walker = func->head.child;
     while (node_walker) {
-
-        switch (node_walker->type) {
-        case NODE_VAR_DECL:
-            compile_var_decl(self, func_block,
-                             (struct node_var_decl *) node_walker);
-            break;
-        case NODE_ASSIGN:
-            compile_assign(self, func_block, node_walker);
-            break;
-        case NODE_CALL:
-            compile_call(self, func_block, node_walker);
-            break;
-        case NODE_RETURN:
-            compile_return(self, func_block, node_walker);
-            break;
-        default:
-            ceh(self, node_walker->place, "tip: dunno how to compile this",
-                "invalid place for this expression");
-        }
-
+        place_node(self, func_block, node_walker);
         node_walker = node_walker->next;
     }
 
@@ -592,6 +769,7 @@ static void compile_type_decl(struct compiler *self,
                               struct node_type_decl *type_decl)
 {
     struct type_struct *type;
+    struct type *field_type;
     void *thing;
 
     thing = type_register_resolve(self->types, type_decl->typename);
@@ -601,8 +779,11 @@ static void compile_type_decl(struct compiler *self,
     }
 
     type = type_register_alloc_struct(self->types, type_decl->typename);
-    // todo finish declaring type
-    //      implement type_register_alloc_struct
+
+    for (int i = 0; i < type_decl->n_fields; i++) {
+        field_type = make_real_type(self, type_decl->fields[i]->parsed_type);
+        type_struct_add_field(type, field_type, type_decl->fields[i]->name);
+    }
 }
 
 void compiler_compile(struct compiler *self)
@@ -638,11 +819,10 @@ void compiler_compile(struct compiler *self)
         func_walker = func_walker->next;
     }
 
-    /* We need to remmeber to add all the STRING blocks to the file. */
+    /* We need to remember to add all the STRING blocks to the file. */
 
     for (int i = 0; i < self->n_strings; i++) {
-        block_insert_first_child(self->file_block,
-                                 (struct block *) self->strings[i]);
+        block_add_child(self->file_block, (struct block *) self->strings[i]);
     }
 
     block_tree_dump(self->file_block);

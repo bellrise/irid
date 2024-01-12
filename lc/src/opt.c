@@ -22,6 +22,7 @@ void opt_set_defaults(struct options *opts)
     opts->set_origin = false;
 
     opts->w_unused_var = true;
+    opts->f_comment_asm = false;
 }
 
 static void warn_opt(struct options *opts, const char *name)
@@ -35,6 +36,12 @@ static void warn_opt(struct options *opts, const char *name)
 
     if (!strcmp(name, "unused-var"))
         opts->w_unused_var = set_mode;
+}
+
+static void func_opt(struct options *opts, const char *name)
+{
+    if (!strcmp(name, "comment-asm"))
+        opts->f_comment_asm = true;
 }
 
 void opt_parse(struct options *opts, int argc, char **argv)
@@ -51,11 +58,14 @@ void opt_parse(struct options *opts, int argc, char **argv)
     opt_index = 0;
 
     while (1) {
-        c = getopt_long(argc, argv, "hg:o:vW:", long_opts, &opt_index);
+        c = getopt_long(argc, argv, "f:hg:o:vW:", long_opts, &opt_index);
         if (c == -1)
             break;
 
         switch (c) {
+        case 'f':
+            func_opt(opts, optarg);
+            break;
         case 'h':
             usage();
             exit(0);
@@ -89,6 +99,7 @@ void usage()
     short_usage();
     puts("Compiles Leaf code into Irid assembly.\n");
     printf("Options:\n"
+           "  -fcomment-asm         add comments to the generated assembly\n"
            "  -h, --help            show this usage page\n"
            "  -g, --origin ORIGIN   set the origin of the code section\n"
            "  -o, --output OUTPUT   select output file\n"

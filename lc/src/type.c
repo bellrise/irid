@@ -82,7 +82,7 @@ void parsed_type_dump_inline(struct parsed_type *self)
 
 const char *type_kind_name(int type_kind)
 {
-    const char *names[] = {"NULL", "INTEGER", "POINTER"};
+    const char *names[] = {"NULL", "INTEGER", "POINTER", "STRUCT"};
     return names[type_kind];
 }
 
@@ -106,13 +106,61 @@ bool type_is_null(struct type *self)
 
 int type_size(struct type *self)
 {
+    struct type_struct *struct_type;
+    int total_size;
+
     if (self->type == TYPE_INTEGER)
         return ((struct type_integer *) self)->bit_width >> 3;
     if (self->type == TYPE_POINTER)
         return 2;
+    if (self->type == TYPE_STRUCT) {
+        total_size = 0;
+        struct_type = (struct type_struct *) self;
+        for (int i = 0; i < struct_type->n_fields; i++)
+            total_size += type_size(struct_type->field_types[i]);
+        return total_size;
+    }
 
     die("cannot calculate type_size for %s", type_kind_name(self->type));
     return 0;
+}
+
+void type_struct_add_field(struct type_struct *self, struct type *type,
+                           const char *name)
+{
+    self->field_types =
+        ac_realloc(global_ac, self->field_types,
+                   sizeof(struct type *) * (self->n_fields + 1));
+    self->field_names = ac_realloc(global_ac, self->field_names,
+                                   sizeof(char *) * (self->n_fields + 1));
+
+    self->field_types[self->n_fields] = type;
+    self->field_names[self->n_fields++] = string_copy_z(name);
+}
+
+struct type *type_struct_find_field(struct type_struct *self, const char *name)
+{
+    for (int i = 0; i < self->n_fields; i++) {
+        if (!strcmp(self->field_names[i], name))
+            return self->field_types[i];
+    }
+
+    return NULL;
+}
+
+int type_struct_field_offset(struct type_struct *self, const char *name)
+{
+    int offset;
+
+    offset = 0;
+    for (int i = 0; i < self->n_fields; i++) {
+        if (!strcmp(self->field_names[i], name))
+            return offset;
+
+        offset += type_size(self->field_types[i]);
+    }
+
+    return offset;
 }
 
 struct type *type_register_resolve(struct type_register *self, const char *name)
@@ -152,8 +200,20 @@ struct type_pointer *type_register_add_pointer(struct type_register *self,
 
     pointer_type = type_alloc(self, TYPE_POINTER);
     pointer_type->base_type = base_type;
+    pointer_type->head.name = base_type->name;
 
     return pointer_type;
+}
+
+struct type_struct *type_register_alloc_struct(struct type_register *self,
+                                               const char *name)
+{
+    struct type_struct *new_type;
+
+    new_type = type_alloc(self, TYPE_STRUCT);
+    new_type->head.name = string_copy_z(name);
+
+    return new_type;
 }
 
 struct parsed_type *parsed_type_register_new(struct parsed_type_register *self,
