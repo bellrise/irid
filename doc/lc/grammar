@@ -32,7 +32,7 @@ type-body:
     | ( type symbol ';' )*
 
 func-body:
-    | ( ( var-decl | expr | assign | if-else ) ';' )*
+    | ( ( var-decl | expr | assign | if-else | return ) ';' )*
 
 var-decl:
     | 'let' type symbol
@@ -40,8 +40,13 @@ var-decl:
 expr:
     | '(' ( expr | assign | math-op ) ')'
     | expr '(' [ expr ( ',' expr )* ] ')'
+    | expr '.' symbol
+    | '&' symbol
     | symbol
     | literal
+
+return:
+    | 'return' [ expr ]
 
 math-op:
     | expr ( '+' | '-' | '*' | '/' | '%' ) expr

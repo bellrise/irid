@@ -1,0 +1,24 @@
+// System entry.
+// Copyright (c) 2024 bellrise
+
+func main();
+func iosel(int dev);
+
+func _entry() [naked, local]
+{
+    // Setup stack before we do anythihng else.
+    __asm("mov sp, 0x8000");
+    __asm("mov bp, 0x8000");
+
+    // Select default console.
+    iosel(0x1000);
+
+    main();
+
+    _halt();
+}
+
+func _halt() [naked, local]
+{
+    __asm("jmp _halt");
+}

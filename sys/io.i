@@ -8,6 +8,7 @@
 .export getc
 .export printf
 .export iosel
+.export __io_write
 
 .valuefile "arch.i"
 
@@ -177,6 +178,34 @@ printf:
 ; iosel(int dev)
 iosel:
     store r0, __io_dev
+    ret
+
+; Write to the selected device.
+; __io_write(char *bytes, int len)
+__io_write:
+    push bp
+    push r4
+    push r5
+    mov bp, sp
+
+    mov r4, r0
+    mov r5, r1
+
+@loop:
+    load h0, r4     ; load char
+    call putc       ; print char
+    add r4, 1       ; move pointer
+    sub r5, 1       ; decrement counter
+
+    cmp r5, 0       ; check if end of buffer
+    jeq @end
+    jmp @loop
+
+@end:
+    mov sp, bp
+    pop r5
+    pop r4
+    pop bp
     ret
 
 __io_dev:
