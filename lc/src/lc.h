@@ -59,6 +59,7 @@ enum tok_type
     TOK_KW_IF,     /* "if" */
     TOK_KW_ELSE,   /* "else" */
     TOK_KW_RETURN, /* "return" */
+    TOK_KW_FOR,    /* "for" */
     TOK_SEMICOLON, /* ; */
     TOK_COLON,     /* : */
     TOK_LBRACE,    /* { */
@@ -81,6 +82,7 @@ enum tok_type
     TOK_AMPERSAND, /* & */
     TOK_QUOTE,     /* ' */
     TOK_PERCENT,   /* % */
+    TOK_THREEDOT,  /* ... */
 };
 
 struct tok
@@ -160,6 +162,7 @@ void type_dump(struct type *);
 const char *type_kind_name(int type_kind);
 const char *type_repr(struct type *);
 bool type_is_null(struct type *);
+bool type_cmp(struct type *, struct type *);
 int type_size(struct type *);
 void type_struct_add_field(struct type_struct *, struct type *type,
                            const char *name);
@@ -238,6 +241,9 @@ enum node_type
     NODE_RETURN,
     NODE_FIELD,
     NODE_IF,
+    NODE_ADDR,
+    NODE_LOOP,
+    NODE_INDEX,
 };
 
 /* The result of parsing is a tree of nodes. */
@@ -264,8 +270,10 @@ struct node_func_decl
     struct node head;
     struct parsed_type **param_types;
     const char **param_names;
+    struct tok **param_places;
     struct parsed_type *return_type;
     struct attributes attrs;
+    bool is_variadic;
     char *name;
     int n_params;
 };
@@ -330,6 +338,18 @@ struct node_field
 {
     struct node head;
     struct tok *field_tok;
+};
+
+struct node_addr
+{
+    struct node head;
+    char *name;
+};
+
+struct node_loop
+{
+    struct node head;
+    char *index_name;
 };
 
 void *node_alloc(struct node *parent, int type);
@@ -447,9 +467,10 @@ enum value_type
     VALUE_NULL,
     VALUE_IMMEDIATE,
     VALUE_LOCAL,
-    VALUE_LABEL,
     VALUE_STRING,
     VALUE_OP,
+    VALUE_ADDR,
+    VALUE_INDEX,
 };
 
 /* A value can either be an immediate integer value, reference to another
@@ -460,10 +481,15 @@ struct value
     int value_type;
     struct tok *place;
     int local_offset;
+    struct type *field_type;
+    bool deref;
+    struct value *index_offset;
+    int index_elem_size;
     union
     {
         struct imm imm_value;
         struct local *local_value;
+        struct value *index_var;
         char *label_value;
         int string_id_value;
         struct op_value op_value;

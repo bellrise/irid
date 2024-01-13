@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+static struct type *resolve_value_type(struct compiler *self,
+                                       struct value *val);
+
 static void ce(struct compiler *self, struct tok *place, const char *fmt, ...)
 {
     va_list args;
@@ -218,9 +221,11 @@ static void convert_field_into_value(struct compiler *self,
                                      struct value *value, struct node *node)
 {
     struct local *local;
-    struct type_struct *var_type;
     struct node_label *var;
     struct node_label *field;
+    struct type *field_type;
+    struct type_struct *var_type;
+    bool deref_needed;
 
     value->value_type = VALUE_LOCAL;
 
@@ -238,15 +243,25 @@ static void convert_field_into_value(struct compiler *self,
 
     value->local_value = local;
 
-    if (local->type->type != TYPE_STRUCT)
-        ce(self, var->head.place, "cannot access field of non-struct type");
-
+    deref_needed = false;
     var_type = (struct type_struct *) local->type;
 
-    if (!type_struct_find_field(var_type, field->name))
+    if (local->type->type == TYPE_POINTER) {
+        var_type = (struct type_struct *) ((struct type_pointer *) local->type)
+                       ->base_type;
+        deref_needed = true;
+    }
+
+    if (var_type->head.type != TYPE_STRUCT)
+        ce(self, value->place, "cannot access field of non-strut type");
+
+    field_type = type_struct_find_field(var_type, field->name);
+    if (!field_type)
         ce(self, field->head.place, "no field named %s in struct", field->name);
 
     value->local_offset += type_struct_field_offset(var_type, field->name);
+    value->field_type = field_type;
+    value->deref = deref_needed;
 }
 
 static void convert_node_into_value(struct compiler *self,
@@ -255,6 +270,7 @@ static void convert_node_into_value(struct compiler *self,
 {
     struct node *left;
     struct node *right;
+    struct type *type;
 
     if (node->type == NODE_LITERAL) {
         convert_literal_into_value(self, value, (struct node_literal *) node);
@@ -298,6 +314,36 @@ static void convert_node_into_value(struct compiler *self,
 
     else if (node->type == NODE_FIELD) {
         convert_field_into_value(self, func, value, node);
+    }
+
+    else if (node->type == NODE_ADDR) {
+        value->value_type = VALUE_ADDR;
+        value->local_value =
+            find_local(func, ((struct node_label *) node)->name);
+        if (!value->local_value)
+            ce(self, node->place, "undeclared variable");
+
+        value->local_value->used = true;
+    }
+
+    else if (node->type == NODE_INDEX) {
+        value->value_type = VALUE_INDEX;
+        value->index_offset = ac_alloc(global_ac, sizeof(struct value));
+        value->index_var = ac_alloc(global_ac, sizeof(struct value));
+
+        left = node->child;
+        right = left->next;
+
+        convert_node_into_value(self, func, value->index_var, left);
+
+        type = resolve_value_type(self, value->index_var);
+        if (type->type != TYPE_POINTER)
+            ce(self, node->place, "cannot index into non-pointer variable");
+
+        value->index_elem_size =
+            type_size(((struct type_pointer *) type)->base_type);
+
+        convert_node_into_value(self, func, value->index_offset, right);
     }
 
     else {
@@ -391,11 +437,6 @@ static void compile_assign(struct compiler *self, struct block_func *func,
     possible_value = var->head.next;
     convert_node_into_value(self, func, &store_block->value, possible_value);
 
-    /* Check if we can assign the value to the variable. */
-
-    // TODO: add this back
-    // check_compat_assign(self, local, literal);
-
     /* Convert the value node into a `struct value`. */
 
     block_add_child((struct block *) func, (struct block *) store_block);
@@ -442,23 +483,59 @@ static void compile_asm_call(struct compiler *self, struct block_func *func,
     asm_block->source = string_copy_z(source_node->string_value);
 }
 
+static struct type *resolve_value_type(struct compiler *self, struct value *val)
+{
+    switch (val->value_type) {
+    case VALUE_IMMEDIATE:
+        return type_register_resolve(self->types, "int");
+    case VALUE_STRING:
+        return (struct type *) type_register_add_pointer(
+            self->types, type_register_resolve(self->types, "char"));
+    case VALUE_LOCAL:
+        if (val->field_type)
+            return val->field_type;
+        return val->local_value->type;
+    case VALUE_ADDR:
+        return (struct type *) type_register_add_pointer(
+            self->types, val->local_value->type);
+    case VALUE_OP:
+        die("resolve_value_type(VALUE_OP) is not implemented");
+    default:
+        return NULL;
+    }
+}
+
 static void validate_call_args(struct compiler *self,
                                struct node_call *call_node,
                                struct block_call *call_block,
                                struct func_sig *func)
 {
+    struct value *arg;
+    struct type *arg_type;
+
     if (call_block->n_args < func->n_params) {
+        cw(self, func->decl->param_places[call_block->n_args], "here");
         ce(self, call_node->call_end_place,
            "missing '%s' argument for function",
            func->decl->param_names[call_block->n_args]);
     }
 
-    if (call_block->n_args > func->n_params) {
+    if (!func->decl->is_variadic && call_block->n_args > func->n_params) {
         ce(self, call_block->args[func->n_params].place,
            "too many arguments for function");
     }
 
-    // TODO compare the types of arguments to the types of parameters
+    for (int i = 0; i < func->n_params; i++) {
+        arg = &call_block->args[i];
+        arg_type = resolve_value_type(self, arg);
+
+        if (!type_cmp(func->param_types[i], arg_type)) {
+            cw(self, func->decl->param_places[i], "here");
+            ce(self, call_block->args[i].place,
+               "type mismatch: function expected %s, got %s",
+               type_repr(func->param_types[i]), type_repr(arg_type));
+        }
+    }
 }
 
 static void compile_call(struct compiler *self, struct block_func *func,
@@ -611,6 +688,108 @@ static void compile_if(struct compiler *self, struct block_func *func_block,
     block_add_child((struct block *) func_block, (struct block *) no_label);
 }
 
+static void set_int_value(struct value *val, int integer)
+{
+    val->value_type = VALUE_IMMEDIATE;
+    val->imm_value.width = 16;
+    val->imm_value.value = integer;
+}
+
+static char *loop_start(struct compiler *self, struct block_func *func_block,
+                        struct local *index_local, struct node *start_value)
+{
+    struct block_store *store_first;
+    struct block_label *loop_label;
+
+    store_first = block_alloc((struct block *) func_block, BLOCK_STORE);
+    store_first->var = index_local;
+    convert_node_into_value(self, func_block, &store_first->value, start_value);
+
+    loop_label = block_alloc((struct block *) func_block, BLOCK_LABEL);
+    loop_label->label = ac_alloc(global_ac, 8);
+    snprintf(loop_label->label, 8, "L%d", func_block->label_index++);
+
+    return loop_label->label;
+}
+
+static void loop_end(struct compiler *self, struct block_func *func_block,
+                     struct local *index_local, char *loop_label,
+                     struct node *end_value)
+{
+    struct block_store *inc_index;
+    struct block_cmp *cmp_index_block;
+    struct block_label *end_loop;
+    struct block_jmp *jmp_block;
+    struct block_jmp *jmp_loop;
+    struct value *inc_left;
+    struct value *inc_right;
+    char *end_label;
+
+    inc_index = block_alloc((struct block *) func_block, BLOCK_STORE);
+    inc_index->var = index_local;
+    inc_index->value.value_type = VALUE_OP;
+
+    inc_left = ac_alloc(global_ac, sizeof(struct value));
+    inc_right = ac_alloc(global_ac, sizeof(struct value));
+    inc_left->value_type = VALUE_LOCAL;
+    inc_left->local_value = index_local;
+
+    set_int_value(inc_right, 1);
+
+    inc_index->value.op_value.type = OP_ADD;
+    inc_index->value.op_value.left = inc_left;
+    inc_index->value.op_value.right = inc_right;
+
+    cmp_index_block = block_alloc((struct block *) func_block, BLOCK_CMP);
+    cmp_index_block->type = CMP_EQ;
+    cmp_index_block->left.value_type = VALUE_LOCAL;
+    cmp_index_block->left.local_value = index_local;
+    convert_node_into_value(self, func_block, &cmp_index_block->right,
+                            end_value);
+
+    end_label = ac_alloc(global_ac, 8);
+    snprintf(end_label, 8, "E%d", func_block->label_index++);
+
+    jmp_block = block_alloc((struct block *) func_block, BLOCK_JMP);
+    jmp_block->type = JMP_EQ;
+    jmp_block->dest = end_label;
+
+    jmp_loop = block_alloc((struct block *) func_block, BLOCK_JMP);
+    jmp_loop->type = JMP_ALWAYS;
+    jmp_loop->dest = loop_label;
+
+    end_loop = block_alloc((struct block *) func_block, BLOCK_LABEL);
+    end_loop->label = end_label;
+}
+
+static void compile_loop(struct compiler *self, struct block_func *func_block,
+                         struct node_loop *loop_node)
+{
+    struct node *start_value;
+    struct node *end_value;
+    struct node *walker;
+    struct local *loop_index;
+    char *loop_label;
+
+    loop_index = alloc_local(func_block);
+    loop_index->type = type_register_resolve(self->types, "int");
+    loop_index->name = string_copy_z(loop_node->index_name);
+    loop_index->decl = NULL;
+
+    start_value = loop_node->head.child;
+    end_value = start_value->next;
+
+    loop_label = loop_start(self, func_block, loop_index, start_value);
+
+    walker = end_value->next;
+    while (walker) {
+        place_node(self, func_block, walker);
+        walker = walker->next;
+    }
+
+    loop_end(self, func_block, loop_index, loop_label, end_value);
+}
+
 static void func_store_arguments(struct compiler *self,
                                  struct node_func_decl *func_decl,
                                  struct block_func *func_block)
@@ -651,6 +830,9 @@ static void place_node(struct compiler *self, struct block_func *func_node,
         break;
     case NODE_IF:
         compile_if(self, func_node, this_node);
+        break;
+    case NODE_LOOP:
+        compile_loop(self, func_node, (struct node_loop *) this_node);
         break;
     default:
         ceh(self, this_node->place, "tip: dunno how to compile this",
@@ -693,7 +875,8 @@ static void compile_func(struct compiler *self, struct node_func_def *func)
     if (!(func->decl->attrs.flags & ATTR_NAKED))
         block_alloc((struct block *) func_block, BLOCK_EPILOGUE);
 
-    /* Walk through the locals to check if there are any unused variables. */
+    /* Walk through the locals to check if there are any unused variables.
+     */
 
     if (self->opts->w_unused_var) {
         for (int i = 0; i < func_block->n_locals; i++) {

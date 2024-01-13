@@ -28,12 +28,12 @@ static void tnew(struct tokens *self, int type, const char *s, int len)
 const char *tok_typename(int type)
 {
     const char *toknames[] = {
-        "NULL",      "NUM",       "CHAR",   "STR",    "SYM",     "KW_TYPE",
-        "KW_DECL",   "KW_FUNC",   "KW_LET", "KW_IF",  "KW_ELSE", "KW_RETURN",
-        "SEMICOLON", "COLON",     "LBRACE", "RBRACE", "LPAREN",  "RPAREN",
-        "LBRACKET",  "RBRACKET",  "ARROW",  "PLUS",   "MINUS",   "STAR",
-        "SLASH",     "EQ",        "CMPEQ",  "CMPNEQ", "NOT",     "DOT",
-        "COMMA",     "AMPERSAND", "QUOTE",  "PERCENT"};
+        "NULL",    "NUM",       "CHAR",      "STR",    "SYM",     "KW_TYPE",
+        "KW_DECL", "KW_FUNC",   "KW_LET",    "KW_IF",  "KW_ELSE", "KW_RETURN",
+        "KW_FOR",  "SEMICOLON", "COLON",     "LBRACE", "RBRACE",  "LPAREN",
+        "RPAREN",  "LBRACKET",  "RBRACKET",  "ARROW",  "PLUS",    "MINUS",
+        "STAR",    "SLASH",     "EQ",        "CMPEQ",  "CMPNEQ",  "NOT",
+        "DOT",     "COMMA",     "AMPERSAND", "QUOTE",  "PERCENT", "THREEDOT"};
 
     return toknames[type];
 }
@@ -48,32 +48,29 @@ static bool issymchar(char c)
     return isstartsymchar(c) || isdigit(c);
 }
 
-static int min(int a, int b)
-{
-    return a < b ? a : b;
-}
-
 static void replace_syms_with_kw(struct tokens *self)
 {
     struct
     {
         int type;
         const char *name;
-    } strings[] = {{TOK_KW_TYPE, "type"},    {TOK_KW_DECL, "decl"},
-                   {TOK_KW_FUNC, "func"},    {TOK_KW_LET, "let"},
-                   {TOK_KW_IF, "if"},        {TOK_KW_ELSE, "else"},
-                   {TOK_KW_RETURN, "return"}};
+    } strings[] = {{TOK_KW_TYPE, "type"},     {TOK_KW_DECL, "decl"},
+                   {TOK_KW_FUNC, "func"},     {TOK_KW_LET, "let"},
+                   {TOK_KW_IF, "if"},         {TOK_KW_ELSE, "else"},
+                   {TOK_KW_RETURN, "return"}, {TOK_KW_FOR, "for"}};
 
-    const int n_strings = 7;
-    int len;
+    const int n_strings = 8;
 
     for (int i = 0; i < self->n_tokens; i++) {
         if (!self->tokens[i].len)
             continue;
 
         for (int j = 0; j < n_strings; j++) {
-            len = min(self->tokens[i].len, strlen(strings[j].name));
-            if (!strncmp(self->tokens[i].pos, strings[j].name, len)) {
+            if (self->tokens[i].len != (int) strlen(strings[j].name))
+                continue;
+
+            if (!strncmp(self->tokens[i].pos, strings[j].name,
+                         self->tokens[i].len)) {
                 self->tokens[i].type = strings[j].type;
                 break;
             }
@@ -190,7 +187,12 @@ void tokens_tokenize(struct tokens *self)
             }
             break;
         case '.':
-            tnew(self, TOK_DOT, p, 1);
+            if (p[1] == '.' && p[2] == '.') {
+                tnew(self, TOK_THREEDOT, p, 3);
+                p += 2;
+            } else {
+                tnew(self, TOK_DOT, p, 1);
+            }
             break;
         case ',':
             tnew(self, TOK_COMMA, p, 1);

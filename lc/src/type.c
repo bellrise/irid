@@ -104,6 +104,14 @@ bool type_is_null(struct type *self)
     return self->type == TYPE_NULL;
 }
 
+bool type_cmp(struct type *self, struct type *other)
+{
+    if (self->type != other->type)
+        return false;
+
+    return !strcmp(self->name, other->name);
+}
+
 int type_size(struct type *self)
 {
     struct type_struct *struct_type;

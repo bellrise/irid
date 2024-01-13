@@ -36,6 +36,9 @@ void *node_alloc(struct node *parent, int type)
     case NODE_FIELD:
         alloc_size = sizeof(struct node_field);
         break;
+    case NODE_LOOP:
+        alloc_size = sizeof(struct node_loop);
+        break;
     default:
         alloc_size = sizeof(struct node);
     }
@@ -68,11 +71,11 @@ void node_add_child(struct node *parent, struct node *child)
 
 const char *node_name(struct node *node)
 {
-    const char *names[] = {"NULL",      "FILE",     "FUNC_DECL", "FUNC_DEF",
-                           "TYPE_DECL", "VAR_DECL", "ASSIGN",    "ADD",
-                           "SUB",       "MUL",      "DIV",       "MOD",
-                           "CMPEQ",     "CMPNEQ",   "CALL",      "LABEL",
-                           "LITERAL",   "RETURN",   "FIELD",     "IF"};
+    const char *names[] = {
+        "NULL",   "FILE",   "FUNC_DECL", "FUNC_DEF", "TYPE_DECL", "VAR_DECL",
+        "ASSIGN", "ADD",    "SUB",       "MUL",      "DIV",       "MOD",
+        "CMPEQ",  "CMPNEQ", "CALL",      "LABEL",    "LITERAL",   "RETURN",
+        "FIELD",  "IF",     "ADDR",      "LOOP",     "INDEX"};
     return names[node->type];
 }
 
@@ -104,6 +107,16 @@ static void var_decl_info(struct node_var_decl *self)
 static void label_info(struct node_label *self)
 {
     printf(" \033[32m%s\033[0m", self->name);
+}
+
+static void addr_info(struct node_addr *self)
+{
+    printf(" \033[32m%s\033[0m", self->name);
+}
+
+static void loop_info(struct node_loop *self)
+{
+    printf(" \033[32m%s\033[0m ", self->index_name);
 }
 
 static void literal_info(struct node_literal *self)
@@ -155,6 +168,12 @@ static void node_tree_dump_level(struct node *node, int level)
         break;
     case NODE_TYPE_DECL:
         type_decl_info((struct node_type_decl *) node);
+        break;
+    case NODE_ADDR:
+        addr_info(((struct node_addr *) node));
+        break;
+    case NODE_LOOP:
+        loop_info(((struct node_loop *) node));
         break;
     };
 

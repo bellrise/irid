@@ -97,6 +97,31 @@ static void emit_op(struct emitter *self, int result_register,
     }
 }
 
+static void store_value_addr_into_register(struct emitter *self,
+                                           int register_id, struct value *value)
+{
+    if (value->value_type == VALUE_LOCAL) {
+        /* If we want to deref, first load the pointer into a register. */
+        if (value->deref) {
+            fprintf(self->out, "    mov r4, bp\n");
+            fprintf(self->out, "    sub r4, %d\n",
+                    value->local_value->local_block->emit_offset);
+            fprintf(self->out, "    load %s, r4\n", register_name(register_id));
+            fprintf(self->out, "    add %s, %d\n", register_name(register_id),
+                    value->local_offset);
+        } else {
+            fprintf(self->out, "    mov %s, bp\n", register_name(register_id));
+            fprintf(self->out, "    sub %s, %d\n", register_name(register_id),
+                    value->local_value->local_block->emit_offset
+                        - value->local_offset);
+        }
+    }
+
+    else {
+        die("cannot store value addr into register");
+    }
+}
+
 static void store_value_into_register(struct emitter *self, int register_id,
                                       struct value *value)
 {
@@ -106,10 +131,7 @@ static void store_value_into_register(struct emitter *self, int register_id,
     }
 
     else if (value->value_type == VALUE_LOCAL) {
-        fprintf(self->out, "    mov r4, bp\n");
-        fprintf(self->out, "    sub r4, %d\n",
-                value->local_value->local_block->emit_offset
-                    + value->local_offset);
+        store_value_addr_into_register(self, R_R4, value);
         fprintf(self->out, "    load %s, r4\n", register_name(register_id));
     }
 
@@ -122,6 +144,32 @@ static void store_value_into_register(struct emitter *self, int register_id,
         emit_op(self, register_id, &value->op_value);
     }
 
+    else if (value->value_type == VALUE_ADDR) {
+        fprintf(self->out, "    mov %s, bp\n", register_name(register_id));
+        fprintf(self->out, "    sub %s, %d\n", register_name(register_id),
+                value->local_value->local_block->emit_offset
+                    + value->local_offset);
+    }
+
+    else if (value->value_type == VALUE_INDEX) {
+        /* Get the pointer to the value, and then calculate the offset required,
+           which means multiplying the index by the size of a single element. */
+
+        store_value_into_register(self, R_R6, value->index_offset);
+
+        /* multiply by the element size */
+        fprintf(self->out, "    mul r6, %d\n", value->index_elem_size);
+
+        /* r4 is the base pointer */
+        store_value_into_register(self, R_R4, value->index_var);
+
+        /* offset the base pointer */
+        fprintf(self->out, "    add r4, r6\n");
+
+        /* read the value at index */
+        fprintf(self->out, "    load %s, r4\n", register_name(register_id));
+    }
+
     else {
         die("cannot store value into register");
     }
@@ -131,7 +179,7 @@ static void store_register_into_local(struct emitter *self, int register_id,
                                       struct block_local *local, int offset)
 {
     fprintf(self->out, "    mov r4, bp\n");
-    fprintf(self->out, "    sub r4, %d\n", local->emit_offset + offset);
+    fprintf(self->out, "    sub r4, %d\n", local->emit_offset - offset);
     fprintf(self->out, "    store %s, r4\n", register_name(register_id));
 }
 

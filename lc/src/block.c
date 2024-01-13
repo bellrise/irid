@@ -128,11 +128,30 @@ static void value_inline(struct value *val)
         printf("str_id(%d)", val->string_id_value);
     if (val->value_type == VALUE_LOCAL)
         printf("local(%s +%d)", val->local_value->name, val->local_offset);
-    if (val->value_type == VALUE_LABEL)
-        printf("label(%s)", val->label_value);
+    if (val->value_type == VALUE_ADDR)
+        printf("addr(%s +%d)", val->local_value->name, val->local_offset);
+
+    if (val->value_type == VALUE_INDEX) {
+        value_inline(val->index_var);
+        printf("[");
+        value_inline(val->index_offset);
+        printf("]");
+    }
+
     if (val->value_type == VALUE_OP) {
         value_inline(val->op_value.left);
-        printf(" OP ");
+
+        switch (val->op_value.type) {
+        case OP_ADD:
+            printf(" ADD ");
+            break;
+        case OP_SUB:
+            printf(" SUB ");
+            break;
+        default:
+            printf(" OP ");
+        }
+
         value_inline(val->op_value.right);
     }
 }
