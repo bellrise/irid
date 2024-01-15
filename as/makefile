@@ -19,7 +19,7 @@ BT  ?= debug
 
 ifeq ($(BT), debug)
 	CFLAGS += -O0 -ggdb -DDEBUG=1
-	LDFLAGS += -fsanitize=address
+	LDFLAGS +=
 else ifeq ($(BT), release)
 	CFLAGS += -O3
 else
@@ -37,10 +37,6 @@ clean:
 	echo "  RM build"
 	rm -rf build
 
-install:
-	echo "  CP $(OUT) $(PREFIX)/bin/$(BIN)"
-	cp $(OUT) $(PREFIX)/bin/$(BIN)
-
 test:
 	./runtests.sh
 
@@ -49,11 +45,11 @@ compile_flags.txt:
 
 $(OUT): $(OBJ) $(LIB)
 	@echo "  LD $@"
-	@$(CXX) -o $@ $(CFLAGS) $(LDFLAGS) $^ $(LIB)
+	$(CXX) -o $@ $(CFLAGS) $(LDFLAGS) $^ $(LIB)
 
 build/%.o: src/%.cc $(DEP)
 	@echo "  CXX $<"
-	@$(CXX) -c -o $@ $(CFLAGS) $<
+	$(CXX) -c -o $@ $(CFLAGS) $(LDFLAGS) $<
 
 ../libiridtools/build/libiridtools.a:
 	@make -C ../libiridtools

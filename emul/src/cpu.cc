@@ -32,7 +32,6 @@ void handle_ctrlc(int __attribute__((unused)) sig)
     tcgetattr(STDIN_FILENO, &term);
     term.c_lflag |= ICANON | ECHO;
     tcsetattr(STDIN_FILENO, 0, &term);
-    write(STDOUT_FILENO, "\r", 1);
 
     _exit(1);
 }

@@ -17,7 +17,7 @@ BT  ?= debug
 
 ifeq ($(BT), debug)
 	CFLAGS += -O0 -ggdb -DDEBUG=1
-	LDFLAGS += -fsanitize=undefined
+	LDFLAGS +=
 else ifeq ($(BT), release)
 	CFLAGS += -O3
 else
