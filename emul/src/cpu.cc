@@ -11,8 +11,6 @@
 #include <time.h>
 #include <unistd.h>
 
-static bool global_stop_cpu = false;
-
 cpu::cpu(memory& memory)
     : m_mem(memory)
     , m_interrupts(false)
@@ -29,18 +27,14 @@ cpu::~cpu() { }
 
 void handle_ctrlc(int __attribute__((unused)) sig)
 {
-    /* If the CPU did not stop and we find ourselfs here again, force exit. */
-    if (global_stop_cpu) {
-        puts("\nForced exit.");
-        exit(1);
-    }
-
     struct termios term;
+
     tcgetattr(STDIN_FILENO, &term);
     term.c_lflag |= ICANON | ECHO;
     tcsetattr(STDIN_FILENO, 0, &term);
+    write(STDOUT_FILENO, "\r", 1);
 
-    global_stop_cpu = true;
+    _exit(1);
 }
 
 void cpu::start()
@@ -135,11 +129,6 @@ void cpu::mainloop()
     u8 instr;
 
     while (1) {
-        /* Quick check if the user requested a shutdown. */
-
-        if (global_stop_cpu)
-            throw cpucall_request(cpucall_request::RQ_POWEROFF);
-
         /* Start the instruction cycle. */
 
         clock_gettime(CLOCK_MONOTONIC, &instr_time_start);
@@ -330,7 +319,8 @@ dont_step:
         if (nsec < m_cycle_ns) {
             sleep_time.tv_sec = 0;
             sleep_time.tv_nsec = m_cycle_ns - nsec;
-            nanosleep(&sleep_time, NULL);
+            if (nanosleep(&sleep_time, NULL) == -1)
+                die("something interrupted the clock cycle (%d)", errno);
         }
 
         m_total_instructions++;

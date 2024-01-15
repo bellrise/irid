@@ -37,13 +37,14 @@ void memory::write8(u16 addr, u8 value)
 u16 memory::read16(u16 addr)
 {
     checkaddr(addr);
-    return *((u16 *) &m_mem[addr]);
+    return m_mem[addr] | (m_mem[addr + 1] << 8);
 }
 
 void memory::write16(u16 addr, u16 value)
 {
     checkaddr(addr);
-    *(u16 *) (&m_mem[addr]) = value;
+    m_mem[addr] = value & 0xff;
+    m_mem[addr + 1] = (value & 0xff00) >> 8;
 }
 
 void memory::read_range(u16 src, void *dest, u16 n)

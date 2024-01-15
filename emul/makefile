@@ -4,7 +4,7 @@
 CXX ?= clang++
 
 CFLAGS    += -Wall -Wextra -I../include
-LDFLAGS   += -lxcb
+LDFLAGS   +=
 MAKEFLAGS += -j$(nproc)
 
 PREFIX := /usr/local
@@ -16,7 +16,8 @@ OUT := build/$(BIN)
 BT  ?= debug
 
 ifeq ($(BT), debug)
-	CFLAGS += -O0 -ggdb -DDEBUG=1 -fsanitize=address
+	CFLAGS += -O0 -ggdb -DDEBUG=1
+	LDFLAGS += -fsanitize=undefined
 else ifeq ($(BT), release)
 	CFLAGS += -O3
 else
@@ -26,17 +27,12 @@ endif
 
 all: build $(OUT)
 
-
 build:
 	mkdir -p build
 
 clean:
 	echo "  RM build"
 	rm -rf build
-
-install:
-	echo "  CP $(OUT) $(PREFIX)/bin/$(BIN)"
-	cp $(OUT) $(PREFIX)/bin/$(BIN)
 
 compile_flags.txt:
 	echo $(CFLAGS) -xc++ | tr ' ' '\n' > compile_flags.txt
@@ -47,7 +43,7 @@ $(OUT): $(OBJ)
 
 build/%.o: src/%.cc
 	@echo "  CXX $<"
-	@$(CXX) -c -o $@ $(CFLAGS) $<
+	@$(CXX) -c -o $@ $(CFLAGS) $(LDFLAGS) $<
 
 
 .PHONY: compile_flags.txt

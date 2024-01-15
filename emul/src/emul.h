@@ -10,7 +10,7 @@
 #include <stdexcept>
 #include <vector>
 
-#define IRID_EMUL_VERSION "0.5"
+#define IRID_EMUL_VERSION "0.6"
 
 #ifdef DEBUG
 /* info() is only called if DEBUG is defined. */

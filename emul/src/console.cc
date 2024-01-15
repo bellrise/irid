@@ -35,6 +35,8 @@ device console_create(int in, int out)
 
     console.state = new console_state;
 
+    state(console)->readbuffer = std::queue<u8>();
+    state(console)->control_mode = false;
     state(console)->in = in;
     state(console)->out = out;
 
