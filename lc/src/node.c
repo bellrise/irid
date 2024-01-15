@@ -39,6 +39,9 @@ void *node_alloc(struct node *parent, int type)
     case NODE_LOOP:
         alloc_size = sizeof(struct node_loop);
         break;
+    case NODE_ADDR:
+        alloc_size = sizeof(struct node_addr);
+        break;
     default:
         alloc_size = sizeof(struct node);
     }

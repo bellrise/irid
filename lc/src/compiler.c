@@ -41,22 +41,6 @@ static void ceh(struct compiler *self, struct tok *place, const char *help_msg,
     exit(1);
 }
 
-static void assign_error(struct compiler *self, struct local *local,
-                         struct node_literal *literal)
-{
-    /* Actual error. */
-
-    source_error_nv(
-        self->tokens, literal->head.place->pos, literal->head.place->len, 0,
-        NULL, NULL, "error", "\033[31m",
-        "type mismatch: cannot assign this value to '%s'", local->name);
-
-    source_error_nv(self->tokens, local->decl->head.place->pos,
-                    local->decl->head.place->len, 0, NULL,
-                    "tip: change the type of the variable", NULL, "\033[35m",
-                    "declared here", local->name);
-}
-
 static struct type *make_real_type(struct compiler *self,
                                    struct parsed_type *parsed_type)
 {
@@ -86,11 +70,33 @@ static struct local *alloc_local(struct block_func *func)
     return local;
 }
 
+static struct local *alloc_global(struct compiler *self)
+{
+    struct local *global;
+
+    global = ac_alloc(global_ac, sizeof(*global));
+    self->globals = ac_realloc(global_ac, self->globals,
+                               sizeof(struct local *) * (self->n_globals + 1));
+    self->globals[self->n_globals++] = global;
+
+    return global;
+}
+
 static struct local *find_local(struct block_func *func, const char *name)
 {
     for (int i = 0; i < func->n_locals; i++) {
         if (!strcmp(func->locals[i]->name, name))
             return func->locals[i];
+    }
+
+    return NULL;
+}
+
+static struct local *find_global(struct compiler *self, const char *name)
+{
+    for (int i = 0; i < self->n_globals; i++) {
+        if (!strcmp(self->globals[i]->name, name))
+            return self->globals[i];
     }
 
     return NULL;
@@ -111,17 +117,6 @@ static void compile_var_decl(struct compiler *self, struct block_func *func,
         ce(self, decl->var_type->place, "unknown type");
     local->name = string_copy_z(decl->name);
     local->decl = decl;
-}
-
-static void check_compat_assign(struct compiler *self, struct local *local,
-                                struct node_literal *literal)
-{
-    if (local->type->type == TYPE_INTEGER) {
-        if (literal->type == LITERAL_INTEGER)
-            return;
-    }
-
-    assign_error(self, local, literal);
 }
 
 static int make_string_id(struct compiler *self, const char *string)
@@ -239,6 +234,9 @@ static void convert_field_into_value(struct compiler *self,
 
     local = find_local(func, var->name);
     if (!local)
+        local = find_global(self, var->name);
+
+    if (!local)
         ce(self, var->head.place, "undeclared variale");
 
     value->local_value = local;
@@ -277,9 +275,18 @@ static void convert_node_into_value(struct compiler *self,
     }
 
     else if (node->type == NODE_LABEL) {
+        /* First, find local. */
         value->value_type = VALUE_LOCAL;
         value->local_value =
             find_local(func, ((struct node_label *) node)->name);
+
+        if (!value->local_value) {
+            /* Otherwise, find a global. */
+            value->value_type = VALUE_GLOBAL;
+            value->local_value =
+                find_global(self, ((struct node_label *) node)->name);
+        }
+
         if (!value->local_value)
             ce(self, node->place, "undeclared variable");
 
@@ -371,7 +378,11 @@ static void compile_assign_field(struct compiler *self, struct block_func *func,
 
     local = find_local(func, var->name);
     if (!local)
+        local = find_global(self, var->name);
+
+    if (!local)
         ce(self, var->head.place, "undeclared variable");
+
     local->used = true;
 
     field = (struct node_label *) var->head.next;
@@ -424,7 +435,11 @@ static void compile_assign(struct compiler *self, struct block_func *func,
 
     local = find_local(func, var->name);
     if (!local)
+        local = find_global(self, var->name);
+
+    if (!local)
         ce(self, var->head.place, "undeclared variable");
+
     local->used = true;
 
     /* Create a new BLOCK_STORE instruction, but don't assign it to the parent
@@ -485,21 +500,39 @@ static void compile_asm_call(struct compiler *self, struct block_func *func,
 
 static struct type *resolve_value_type(struct compiler *self, struct value *val)
 {
+    struct type *resolved_type;
+
     switch (val->value_type) {
     case VALUE_IMMEDIATE:
         return type_register_resolve(self->types, "int");
+
     case VALUE_STRING:
         return (struct type *) type_register_add_pointer(
             self->types, type_register_resolve(self->types, "char"));
+
+    case VALUE_GLOBAL:
     case VALUE_LOCAL:
         if (val->field_type)
             return val->field_type;
         return val->local_value->type;
+
     case VALUE_ADDR:
         return (struct type *) type_register_add_pointer(
             self->types, val->local_value->type);
+
+    case VALUE_INDEX:
+        resolved_type = resolve_value_type(self, val->index_var);
+        if (!resolved_type)
+            return NULL;
+
+        if (resolved_type->type != TYPE_POINTER)
+            die("cannot resolve_value_type of non-pointer VALUE_INDEX");
+
+        return ((struct type_pointer *) resolved_type)->base_type;
+
     case VALUE_OP:
         die("resolve_value_type(VALUE_OP) is not implemented");
+
     default:
         return NULL;
     }
@@ -528,6 +561,15 @@ static void validate_call_args(struct compiler *self,
     for (int i = 0; i < func->n_params; i++) {
         arg = &call_block->args[i];
         arg_type = resolve_value_type(self, arg);
+
+        if (!arg_type) {
+            if (arg->value_type == VALUE_LOCAL
+                || arg->value_type == VALUE_GLOBAL) {
+                cw(self, arg->local_value->decl->head.place, "declared here");
+            }
+
+            ce(self, call_block->args[i].place, "unresolved type of argument");
+        }
 
         if (!type_cmp(func->param_types[i], arg_type)) {
             cw(self, func->decl->param_places[i], "here");
@@ -969,12 +1011,45 @@ static void compile_type_decl(struct compiler *self,
     }
 }
 
+static void compile_global(struct compiler *self, struct node_var_decl *decl)
+{
+    struct local *global;
+
+    if (find_global(self, decl->name))
+        ce(self, decl->head.place, "%s is already declared", decl->name);
+
+    global = alloc_global(self);
+
+    global->type = make_real_type(self, decl->var_type);
+    if (!global->type)
+        ce(self, decl->var_type->place, "unknown type");
+    global->name = string_copy_z(decl->name);
+    global->decl = decl;
+    global->is_global = true;
+
+    if (!global->type)
+        ce(self, decl->var_type->place, "undeclared type");
+}
+
+static void add_global_blocks(struct compiler *self)
+{
+    struct block_global *block;
+
+    for (int i = self->n_globals - 1; i >= 0; i--) {
+        block = block_alloc(NULL, BLOCK_GLOBAL);
+        block->local = self->globals[i];
+        block_insert_first_child(self->file_block, (struct block *) block);
+    }
+}
+
 void compiler_compile(struct compiler *self)
 {
     struct node *func_walker;
 
     self->file_block = block_alloc(NULL, BLOCK_FILE);
     self->types = ac_alloc(global_ac, sizeof(struct type_register));
+    self->globals = NULL;
+    self->n_globals = 0;
     self->strings = NULL;
     self->n_strings = 0;
     self->funcs = NULL;
@@ -990,6 +1065,8 @@ void compiler_compile(struct compiler *self)
             compile_func_decl(self, (struct node_func_decl *) func_walker);
         if (func_walker->type == NODE_TYPE_DECL)
             compile_type_decl(self, (struct node_type_decl *) func_walker);
+        if (func_walker->type == NODE_VAR_DECL)
+            compile_global(self, (struct node_var_decl *) func_walker);
         func_walker = func_walker->next;
     }
 
@@ -1001,6 +1078,10 @@ void compiler_compile(struct compiler *self)
             compile_func(self, (struct node_func_def *) func_walker);
         func_walker = func_walker->next;
     }
+
+    /* Add globals. */
+
+    add_global_blocks(self);
 
     /* We need to remember to add all the STRING blocks to the file. */
 

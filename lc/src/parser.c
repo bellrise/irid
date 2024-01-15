@@ -194,7 +194,8 @@ static struct node_func_decl *parse_func_head(struct parser *self,
     return decl;
 }
 
-static void parse_var_decl(struct parser *self, struct node *parent)
+static void parse_var_decl(struct parser *self, struct node *parent,
+                           bool end_with_semicolon)
 {
     struct node_var_decl *decl;
     struct tok *tok;
@@ -216,6 +217,12 @@ static void parse_var_decl(struct parser *self, struct node *parent)
         pef(self, tok, "var", "expected variable name");
 
     decl->name = string_copy(tok->pos, tok->len);
+
+    if (end_with_semicolon) {
+        tok = toknext(self);
+        if (tok->type != TOK_SEMICOLON)
+            pef(self, tok, ";", "expected semicolon");
+    }
 }
 
 static struct node *parse_expr_inside(struct parser *self, struct node *parent);
@@ -625,7 +632,7 @@ static void parse_block(struct parser *self, struct node *parent)
         case TOK_RBRACE:
             return;
         case TOK_KW_LET:
-            parse_var_decl(self, parent);
+            parse_var_decl(self, parent, false);
             break;
         case TOK_KW_RETURN:
             parse_return(self, parent);
@@ -831,6 +838,9 @@ void parser_parse(struct parser *self)
             break;
         case TOK_KW_TYPE:
             parse_type_decl(self, self->tree);
+            break;
+        case TOK_KW_LET:
+            parse_var_decl(self, self->tree, true);
             break;
         default:
             peh(self, tok, "expected a top-level declaration, like a function",

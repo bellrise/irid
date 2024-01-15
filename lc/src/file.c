@@ -10,6 +10,7 @@
 char *file_read(const char *path)
 {
     char *contents;
+    long read_siz;
     long siz;
     FILE *f;
 
@@ -22,7 +23,11 @@ char *file_read(const char *path)
 
     /* malloc 16 bytes more, for some buffer-overflow protection */
     contents = malloc(siz + 16);
-    fread(contents, 1, siz, f);
+    read_siz = fread(contents, 1, siz, f);
+
+    if (read_siz != siz)
+        die("failed to read file %s\n", path);
+
     contents[siz] = 0;
 
     fclose(f);

@@ -111,6 +111,7 @@ void opt_add_missing_opts(struct options *opts)
 {
     static char output_filename[PATH_MAX];
     char buf[NAME_MAX];
+    char *input_copy;
     char *p;
 
     if (!opts->input)
@@ -120,13 +121,16 @@ void opt_add_missing_opts(struct options *opts)
         return;
 
     memset(buf, 0, NAME_MAX);
-    p = basename(opts->input);
+
+    input_copy = string_copy_z(input_copy);
+    p = basename(input_copy);
+
     strcpy(buf, p);
 
     if ((p = strchr(buf, '.')))
         *p = 0;
 
-    snprintf(output_filename, PATH_MAX, "%s/%s.i", dirname(opts->input), buf);
+    snprintf(output_filename, PATH_MAX, "%s/%s.i", dirname(input_copy), buf);
     if (!access(output_filename, F_OK))
         die("output file %s already exists", output_filename);
 

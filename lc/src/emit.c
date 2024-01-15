@@ -8,7 +8,7 @@
 static void store_value_into_register(struct emitter *self, int register_id,
                                       struct value *value);
 static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct block_local *local, int offset);
+                                      struct local *local, int offset);
 
 static void emit_func_preamble(struct emitter *self, struct block_func *func)
 {
@@ -117,6 +117,11 @@ static void store_value_addr_into_register(struct emitter *self,
         }
     }
 
+    else if (value->value_type == VALUE_GLOBAL) {
+        fprintf(self->out, "    mov %s, _G_%s\n", register_name(register_id),
+                value->local_value->name);
+    }
+
     else {
         die("cannot store value addr into register");
     }
@@ -130,7 +135,8 @@ static void store_value_into_register(struct emitter *self, int register_id,
                 value->imm_value.value);
     }
 
-    else if (value->value_type == VALUE_LOCAL) {
+    else if (value->value_type == VALUE_LOCAL
+             || value->value_type == VALUE_GLOBAL) {
         store_value_addr_into_register(self, R_R4, value);
         fprintf(self->out, "    load %s, r4\n", register_name(register_id));
     }
@@ -176,11 +182,19 @@ static void store_value_into_register(struct emitter *self, int register_id,
 }
 
 static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct block_local *local, int offset)
+                                      struct local *local, int offset)
 {
-    fprintf(self->out, "    mov r4, bp\n");
-    fprintf(self->out, "    sub r4, %d\n", local->emit_offset - offset);
-    fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+    if (local->is_global) {
+        fprintf(self->out, "    mov r4, _G_%s\n", local->name);
+        fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+    }
+
+    else {
+        fprintf(self->out, "    mov r4, bp\n");
+        fprintf(self->out, "    sub r4, %d\n",
+                local->local_block->emit_offset - offset);
+        fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+    }
 }
 
 static void emit_store(struct emitter *self, struct block_store *store)
@@ -189,8 +203,7 @@ static void emit_store(struct emitter *self, struct block_store *store)
         fprintf(self->out, "    ; store %s\n", store->var->name);
 
     store_value_into_register(self, R_R5, &store->value);
-    store_register_into_local(self, R_R5, store->var->local_block,
-                              store->store_offset);
+    store_register_into_local(self, R_R5, store->var, store->store_offset);
 }
 
 static void emit_call(struct emitter *self, struct block_call *func)
@@ -245,15 +258,14 @@ static void emit_store_return(struct emitter *self,
 static void emit_store_result(struct emitter *self,
                               struct block_store *store_return)
 {
-    store_register_into_local(self, R_R0, store_return->var->local_block,
+    store_register_into_local(self, R_R0, store_return->var,
                               store_return->store_offset);
 }
 
 static void emit_store_arg(struct emitter *self,
                            struct block_store_arg *store_arg)
 {
-    store_register_into_local(self, R_R0 + store_arg->arg,
-                              store_arg->local->local_block, 0);
+    store_register_into_local(self, R_R0 + store_arg->arg, store_arg->local, 0);
 }
 
 static void emit_func(struct emitter *self, struct block_func *func)
@@ -321,6 +333,12 @@ static void emit_string(struct emitter *self, struct block_string *string)
     fprintf(self->out, ".string \"%s\"\n", string->value);
 }
 
+static void emit_global(struct emitter *self, struct block_global *global)
+{
+    fprintf(self->out, "_G_%s:\n", global->local->name);
+    fprintf(self->out, ".resv %d\n", type_size(global->local->type));
+}
+
 void emitter_emit(struct emitter *self, struct options *opts)
 {
     struct block *block;
@@ -345,6 +363,9 @@ void emitter_emit(struct emitter *self, struct options *opts)
             break;
         case BLOCK_STRING:
             emit_string(self, (struct block_string *) block);
+            break;
+        case BLOCK_GLOBAL:
+            emit_global(self, (struct block_global *) block);
             break;
         default:
             die("unexpected block: %s", block_name(block));

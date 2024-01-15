@@ -19,6 +19,9 @@ void *block_alloc(struct block *parent, int type)
     case BLOCK_LOCAL:
         alloc_size = sizeof(struct block_local);
         break;
+    case BLOCK_GLOBAL:
+        alloc_size = sizeof(struct block_global);
+        break;
     case BLOCK_STRING:
         alloc_size = sizeof(struct block_string);
         break;
@@ -101,10 +104,10 @@ void block_insert_next(struct block *any_block, struct block *sel_block)
 const char *block_name(struct block *block)
 {
     const char *names[] = {
-        "NULL",  "FILE_START", "FUNC",         "PREAMBLE",     "EPILOGUE",
-        "LOCAL", "STORE",      "STORE_RETURN", "STORE_RESULT", "STORE_ARG",
-        "LOAD",  "STRING",     "CALL",         "ASM",          "JMP",
-        "LABEL", "CMP"};
+        "NULL",      "FILE_START", "FUNC",   "PREAMBLE",     "EPILOGUE",
+        "LOCAL",     "GLOBAL",     "STORE",  "STORE_RETURN", "STORE_RESULT",
+        "STORE_ARG", "LOAD",       "STRING", "CALL",         "ASM",
+        "JMP",       "LABEL",      "CMP"};
     return names[block->type];
 }
 
@@ -114,6 +117,11 @@ static void string_info(struct block_string *self)
 }
 
 static void local_info(struct block_local *self)
+{
+    printf(" %s %s", type_repr(self->local->type), self->local->name);
+}
+
+static void global_info(struct block_global *self)
 {
     printf(" %s %s", type_repr(self->local->type), self->local->name);
 }
@@ -128,6 +136,8 @@ static void value_inline(struct value *val)
         printf("str_id(%d)", val->string_id_value);
     if (val->value_type == VALUE_LOCAL)
         printf("local(%s +%d)", val->local_value->name, val->local_offset);
+    if (val->value_type == VALUE_GLOBAL)
+        printf("global(%s +%d)", val->local_value->name, val->local_offset);
     if (val->value_type == VALUE_ADDR)
         printf("addr(%s +%d)", val->local_value->name, val->local_offset);
 
@@ -216,6 +226,9 @@ static void block_tree_dump_level(struct block *block, int level)
         break;
     case BLOCK_LOCAL:
         local_info((struct block_local *) block);
+        break;
+    case BLOCK_GLOBAL:
+        global_info((struct block_global *) block);
         break;
     case BLOCK_STORE:
         store_info((struct block_store *) block);

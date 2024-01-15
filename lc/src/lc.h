@@ -378,6 +378,7 @@ enum block_type
     BLOCK_PREAMBLE,
     BLOCK_EPILOGUE,
     BLOCK_LOCAL,
+    BLOCK_GLOBAL,
     BLOCK_STORE,
     BLOCK_STORE_RETURN,
     BLOCK_STORE_RESULT,
@@ -405,9 +406,14 @@ struct local
 {
     struct type *type;
     struct node_var_decl *decl;
-    struct block_local *local_block;
     char *name;
+    bool is_global;
     bool used;
+    union
+    {
+        struct block_local *local_block;
+        struct block_global *global_block;
+    };
 };
 
 struct block_func
@@ -428,6 +434,12 @@ struct block_local
     struct block head;
     struct local *local;
     int emit_offset;
+};
+
+struct block_global
+{
+    struct block head;
+    struct local *local;
 };
 
 enum imm_width_type
@@ -467,6 +479,7 @@ enum value_type
     VALUE_NULL,
     VALUE_IMMEDIATE,
     VALUE_LOCAL,
+    VALUE_GLOBAL,
     VALUE_STRING,
     VALUE_OP,
     VALUE_ADDR,
@@ -593,6 +606,8 @@ struct compiler
     struct block_string **strings;
     struct options *opts;
     struct func_sig **funcs;
+    struct local **globals;
+    int n_globals;
     int n_funcs;
     int n_strings;
 };

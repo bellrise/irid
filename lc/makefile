@@ -19,7 +19,7 @@ BT  ?= debug
 
 ifeq ($(BT), debug)
 	CFLAGS += -O0 -ggdb -DDEBUG=1
-	LDFLAGS += -fsanitize=address
+	LDFLAGS +=
 else ifeq ($(BT), release)
 	CFLAGS += -O3
 else
@@ -37,10 +37,6 @@ clean:
 	echo "  RM build"
 	rm -rf build
 
-install:
-	echo "  CP $(OUT) $(PREFIX)/bin/$(BIN)"
-	cp $(OUT) $(PREFIX)/bin/$(BIN)
-
 compile_flags.txt:
 	echo $(CFLAGS) -xc | tr ' ' '\n' > compile_flags.txt
 
@@ -50,7 +46,7 @@ $(OUT): $(OBJ)
 
 build/%.o: src/%.c $(DEP)
 	@echo "  CC $<"
-	@$(CC) -c -o $@ $(CFLAGS) $<
+	@$(CC) -c -o $@ $(CFLAGS) $(LDFLAGS) $<
 
 
 .PHONY: compile_flags.txt
