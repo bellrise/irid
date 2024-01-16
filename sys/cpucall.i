@@ -8,4 +8,5 @@
 ; __cpucall(int function, ...)
 __cpucall:
     cpucall
+    mov r0, r2
     ret

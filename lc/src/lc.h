@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #define LC_VER_MAJ 0
-#define LC_VER_MIN 4
+#define LC_VER_MIN 6
 
 struct allocator;
 extern struct allocator *global_ac;
@@ -28,6 +28,7 @@ struct options
     bool w_unused_var;
 
     bool f_comment_asm;
+    bool f_cmp_literal;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -254,6 +255,7 @@ struct node
     struct node *child;
     struct node *next;
     struct tok *place;
+    struct parsed_type *cast_into;
     int type;
 };
 
@@ -498,6 +500,7 @@ struct value
     bool deref;
     struct value *index_offset;
     int index_elem_size;
+    struct type *cast_type;
     union
     {
         struct imm imm_value;

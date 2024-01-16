@@ -174,6 +174,14 @@ static void store_value_into_register(struct emitter *self, int register_id,
 
         /* read the value at index */
         fprintf(self->out, "    load %s, r4\n", register_name(register_id));
+
+        /* If the value we want to store is a single byte, remember to cut off
+           the high-order byte. */
+
+        if (value->index_elem_size == 1) {
+            fprintf(self->out, "    and %s, 0xff\n",
+                    register_name(register_id));
+        }
     }
 
     else {
@@ -245,6 +253,12 @@ static void emit_cmp(struct emitter *self, struct block_cmp *cmp)
         fprintf(self->out, "    ; cmp\n");
 
     store_value_into_register(self, R_R5, &cmp->left);
+
+    if (self->opts->f_cmp_literal && cmp->right.value_type == VALUE_IMMEDIATE) {
+        fprintf(self->out, "    cmp r5, %d\n", cmp->right.imm_value.value);
+        return;
+    }
+
     store_value_into_register(self, R_R6, &cmp->right);
     fprintf(self->out, "    cmp r5, r6\n");
 }
@@ -284,11 +298,11 @@ static void emit_func(struct emitter *self, struct block_func *func)
         case BLOCK_PREAMBLE:
             emit_func_preamble(self, func);
             break;
-        case BLOCK_EPILOGUE:
-            emit_func_epilogue(self);
-            break;
         case BLOCK_LOCAL:
             emit_local(self, func, (struct block_local *) block);
+            break;
+        case BLOCK_EPILOGUE:
+            emit_func_epilogue(self);
             break;
         case BLOCK_STORE:
             emit_store(self, (struct block_store *) block);

@@ -23,6 +23,7 @@ void opt_set_defaults(struct options *opts)
 
     opts->w_unused_var = true;
     opts->f_comment_asm = false;
+    opts->f_cmp_literal = true;
 }
 
 static void warn_opt(struct options *opts, const char *name)
@@ -40,8 +41,17 @@ static void warn_opt(struct options *opts, const char *name)
 
 static void func_opt(struct options *opts, const char *name)
 {
+    bool set_mode = true;
+
+    if (!strncmp(name, "no-", 3)) {
+        name += 3;
+        set_mode = false;
+    }
+
     if (!strcmp(name, "comment-asm"))
-        opts->f_comment_asm = true;
+        opts->f_comment_asm = set_mode;
+    if (!strcmp(name, "cmp-literal"))
+        opts->f_cmp_literal = set_mode;
 }
 
 void opt_parse(struct options *opts, int argc, char **argv)
@@ -99,12 +109,15 @@ void usage()
     short_usage();
     puts("Compiles Leaf code into Irid assembly.\n");
     printf("Options:\n"
-           "  -fcomment-asm         add comments to the generated assembly\n"
            "  -h, --help            show this usage page\n"
            "  -g, --origin ORIGIN   set the origin of the code section\n"
            "  -o, --output OUTPUT   select output file\n"
            "  -v, --version         show the version and exit\n"
-           "  -Wunused-var          unused variables\n");
+           "  -Wunused-var          unused variables\n"
+           "  -fcomment-asm         add comments to the generated assembly\n"
+           "  -fcmp-literal         optimize comparing with literals\n");
+
+    fputc('\n', stdout);
 }
 
 void opt_add_missing_opts(struct options *opts)

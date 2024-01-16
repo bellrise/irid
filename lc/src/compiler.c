@@ -293,28 +293,6 @@ static void convert_node_into_value(struct compiler *self,
         value->local_value->used = true;
     }
 
-    else if (node->type == NODE_ADD || node->type == NODE_CMPEQ) {
-        value->value_type = VALUE_OP;
-
-        left = node->child;
-        if (!left)
-            ce(self, node->place, "missing left-hand value");
-        right = left->next;
-        if (!right)
-            ce(self, node->place, "missing right-hand value");
-
-        if (node->type == NODE_ADD)
-            value->op_value.type = OP_ADD;
-        if (node->type == NODE_CMPEQ)
-            value->op_value.type = OP_CMPEQ;
-
-        value->op_value.left = ac_alloc(global_ac, sizeof(struct value));
-        value->op_value.right = ac_alloc(global_ac, sizeof(struct value));
-
-        convert_node_into_value(self, func, value->op_value.left, left);
-        convert_node_into_value(self, func, value->op_value.right, right);
-    }
-
     else if (node->type == NODE_CALL) {
         convert_call_node_into_value(self, func, value, node);
     }
@@ -354,8 +332,43 @@ static void convert_node_into_value(struct compiler *self,
     }
 
     else {
-        ce(self, node->place, "cannot convert this into a value");
+        switch (node->type) {
+        case NODE_ADD:
+        case NODE_SUB:
+        case NODE_MUL:
+        case NODE_CMPEQ:
+            value->value_type = VALUE_OP;
+
+            left = node->child;
+            if (!left)
+                ce(self, node->place, "missing left-hand value");
+            right = left->next;
+            if (!right)
+                ce(self, node->place, "missing right-hand value");
+
+            if (node->type == NODE_ADD)
+                value->op_value.type = OP_ADD;
+            if (node->type == NODE_SUB)
+                value->op_value.type = OP_SUB;
+            if (node->type == NODE_MUL)
+                value->op_value.type = OP_MUL;
+            if (node->type == NODE_CMPEQ)
+                value->op_value.type = OP_CMPEQ;
+
+            value->op_value.left = ac_alloc(global_ac, sizeof(struct value));
+            value->op_value.right = ac_alloc(global_ac, sizeof(struct value));
+
+            convert_node_into_value(self, func, value->op_value.left, left);
+            convert_node_into_value(self, func, value->op_value.right, right);
+            break;
+
+        default:
+            ce(self, node->place, "cannot convert this into a value");
+        }
     }
+
+    if (node->cast_into)
+        value->cast_type = make_real_type(self, node->cast_into);
 }
 
 static void compile_assign_field(struct compiler *self, struct block_func *func,
@@ -502,6 +515,9 @@ static struct type *resolve_value_type(struct compiler *self, struct value *val)
 {
     struct type *resolved_type;
 
+    if (val->cast_type)
+        return val->cast_type;
+
     switch (val->value_type) {
     case VALUE_IMMEDIATE:
         return type_register_resolve(self->types, "int");
@@ -531,7 +547,7 @@ static struct type *resolve_value_type(struct compiler *self, struct value *val)
         return ((struct type_pointer *) resolved_type)->base_type;
 
     case VALUE_OP:
-        die("resolve_value_type(VALUE_OP) is not implemented");
+        return resolve_value_type(self, val->op_value.left);
 
     default:
         return NULL;
@@ -1038,7 +1054,7 @@ static void add_global_blocks(struct compiler *self)
     for (int i = self->n_globals - 1; i >= 0; i--) {
         block = block_alloc(NULL, BLOCK_GLOBAL);
         block->local = self->globals[i];
-        block_insert_first_child(self->file_block, (struct block *) block);
+        block_add_child(self->file_block, (struct block *) block);
     }
 }
 

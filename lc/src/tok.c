@@ -120,7 +120,7 @@ void tokens_tokenize(struct tokens *self)
         /* number */
         if (isdigit(*p)) {
             q = p;
-            while (isdigit(*q) || *q == 'x')
+            while (isxdigit(*q) || *q == 'x')
                 q++;
 
             tnew(self, TOK_NUM, p, (size_t) q - (size_t) p);

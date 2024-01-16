@@ -263,6 +263,7 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
         | expr '(' [ expr ( ',' expr )* ] ')'
         | expr '[' expr ']'
         | expr '.' symbol
+        | '[' type expr ']'
         | '&' symbol
         | symbol
         | literal
@@ -271,6 +272,8 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
     struct node_label *label_node;
     struct node_literal *literal_node;
     struct node_addr *addr_node;
+
+    struct parsed_type *cast_into;
 
     struct node *expr;
     struct node *left_expr;
@@ -349,6 +352,28 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
         addr_node->head.place = virtual_tok;
         addr_node->name = string_copy(tok->pos, tok->len);
         left_expr = (struct node *) addr_node;
+    }
+
+    /* '[' type expr ']' */
+
+    else if (tok->type == TOK_LBRACKET) {
+        virtual_tok = ac_alloc(global_ac, sizeof(*virtual_tok));
+        virtual_tok->pos = tok->pos;
+
+        tok = toknext(self);
+        cast_into = parse_type(self);
+
+        tok = toknext(self);
+        left_expr = parse_expr_inside(self, parent);
+        left_expr->place = virtual_tok;
+        left_expr->cast_into = cast_into;
+
+        tok = toknext(self);
+        if (tok->type != TOK_RBRACKET)
+            pef(self, tok, "]", "expected closing bracket for type cast");
+
+        virtual_tok->len =
+            ((size_t) tok->pos + (size_t) tok->len) - (size_t) virtual_tok->pos;
     }
 
     else {
@@ -569,7 +594,7 @@ static void parse_if(struct parser *self, struct node *parent)
 
     tok = toknext(self);
     if (tok->type != TOK_LBRACE)
-        pef(self, tok, "{", "expected closing brace");
+        pef(self, tok, "{", "expected opening brace");
 
     parse_block(self, if_node);
 }
@@ -639,10 +664,10 @@ static void parse_block(struct parser *self, struct node *parent)
             break;
         case TOK_KW_IF:
             parse_if(self, parent);
-            break;
+            continue;
         case TOK_KW_FOR:
             parse_for(self, parent);
-            break;
+            continue;
         default:
             parse_expr(self, parent);
             break;
