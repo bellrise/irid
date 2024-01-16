@@ -243,8 +243,16 @@ static void emit_jmp(struct emitter *self, struct block_jmp *jmp)
     if (jmp->type == JMP_ALWAYS)
         fprintf(self->out, "    jmp @%s\n", jmp->dest);
 
-    if (jmp->type == JMP_EQ)
+    else if (jmp->type == JMP_EQ)
         fprintf(self->out, "    jeq @%s\n", jmp->dest);
+
+    else if (jmp->type == JMP_NEQ) {
+        fprintf(self->out, "    cfs\n");
+        fprintf(self->out, "    jeq @%s\n", jmp->dest);
+    }
+
+    else
+        die("cannot emit jump, unknown flag");
 }
 
 static void emit_cmp(struct emitter *self, struct block_cmp *cmp)

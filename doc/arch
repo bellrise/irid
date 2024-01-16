@@ -73,6 +73,8 @@ Instruction set
     - cml [rx] [rz/imm8/imm16]
         See if the value in the register is less than the register or
         immediate. If the comparison succeeds, the compare flag is set.
+    - cfs
+        Switch compare flag.
 
 * Program control
     - jmp [addr]

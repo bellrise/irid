@@ -337,6 +337,7 @@ static void convert_node_into_value(struct compiler *self,
         case NODE_SUB:
         case NODE_MUL:
         case NODE_CMPEQ:
+        case NODE_CMPNEQ:
             value->value_type = VALUE_OP;
 
             left = node->child;
@@ -354,6 +355,8 @@ static void convert_node_into_value(struct compiler *self,
                 value->op_value.type = OP_MUL;
             if (node->type == NODE_CMPEQ)
                 value->op_value.type = OP_CMPEQ;
+            if (node->type == NODE_CMPNEQ)
+                value->op_value.type = OP_CMPNEQ;
 
             value->op_value.left = ac_alloc(global_ac, sizeof(struct value));
             value->op_value.right = ac_alloc(global_ac, sizeof(struct value));
@@ -720,10 +723,8 @@ static void compile_if(struct compiler *self, struct block_func *func_block,
     convert_node_into_value(self, func_block, &cmp_block->left, left);
     convert_node_into_value(self, func_block, &cmp_block->right, right);
 
-    cmp_block->type = CMP_EQ;
-
     jmp_yes_block = block_alloc(NULL, BLOCK_JMP);
-    jmp_yes_block->type = JMP_EQ;
+    jmp_yes_block->type = cmp_node->type == NODE_CMPEQ ? JMP_EQ : JMP_NEQ;
     jmp_yes_block->dest = yes_label->label;
 
     jmp_no_block = block_alloc(NULL, BLOCK_JMP);
@@ -799,7 +800,6 @@ static void loop_end(struct compiler *self, struct block_func *func_block,
     inc_index->value.op_value.right = inc_right;
 
     cmp_index_block = block_alloc((struct block *) func_block, BLOCK_CMP);
-    cmp_index_block->type = CMP_EQ;
     cmp_index_block->left.value_type = VALUE_LOCAL;
     cmp_index_block->left.local_value = index_local;
     convert_node_into_value(self, func_block, &cmp_index_block->right,

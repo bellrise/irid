@@ -132,6 +132,7 @@ struct cpu
     void cml(u8 left, u8 right);
     void cml8(u8 left, u8 imm8);
     void cml16(u8 left, u16 imm16);
+    void cfs();
     void jmp(u16 addr);
     void jnz(u8 cond, u16 addr);
     void jeq(u16 addr);

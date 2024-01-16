@@ -546,6 +546,7 @@ enum jmp_type
 {
     JMP_ALWAYS,
     JMP_EQ,
+    JMP_NEQ,
 };
 
 struct block_jmp
@@ -568,18 +569,11 @@ struct block_store_arg
     int arg;
 };
 
-enum cmp_type
-{
-    CMP_EQ,
-    CMP_NEQ,
-};
-
 struct block_cmp
 {
     struct block head;
     struct value left;
     struct value right;
-    int type;
 };
 
 void *block_alloc(struct block *parent, int type);

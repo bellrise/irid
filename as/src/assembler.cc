@@ -165,6 +165,7 @@ void assembler::register_instruction_methods()
     m_instructions.push_back(named_method("rti", &assembler::ins_no_arguments));
     m_instructions.push_back(named_method("sti", &assembler::ins_no_arguments));
     m_instructions.push_back(named_method("dsi", &assembler::ins_no_arguments));
+    m_instructions.push_back(named_method("cfs", &assembler::ins_no_arguments));
 
     /* rx, any */
     m_instructions.push_back(named_method("mov", &assembler::ins_dest_and_any));
@@ -1053,8 +1054,9 @@ byte assembler::instruction_id_from_mnemonic(const std::string& mnemonic)
         {"add", I_ADD},         {"sub", I_SUB},   {"jnz", I_JNZ},
         {"push", I_PUSH},       {"pop", I_POP},   {"load", I_LOAD},
         {"store", I_STORE},     {"cmg", I_CMG},   {"cml", I_CML},
-        {"cmp", I_CMP},         {"and", I_AND},   {"or", I_OR},
-        {"shr", I_SHR},         {"shl", I_SHL},   {"mul", I_MUL}};
+        {"cmp", I_CMP},         {"cfs", I_CFS},   {"and", I_AND},
+        {"or", I_OR},           {"shr", I_SHR},   {"shl", I_SHL},
+        {"mul", I_MUL}};
     static const size_t map_size =
         sizeof(mnemonic_map) / sizeof(std::pair<std::string, int>);
 

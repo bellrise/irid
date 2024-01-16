@@ -80,6 +80,7 @@ typedef unsigned char u8;
 #define I_CML16   0x22
 #define I_LOAD16  0x23
 #define I_STORE16 0x24
+#define I_CFS     0x25
 /* reserved */
 #define I_JMP   0x30
 #define I_JNZ   0x31

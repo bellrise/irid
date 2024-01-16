@@ -202,14 +202,16 @@ static void jmp_info(struct block_jmp *self)
 {
     printf(" %s", self->dest);
     if (self->type == JMP_EQ)
-        printf(" flag");
+        printf(" eq");
+    if (self->type == JMP_NEQ)
+        printf(" neq");
 }
 
 static void cmp_info(struct block_cmp *self)
 {
     printf(" ");
     value_inline(&self->left);
-    printf(" %s ", self->type == CMP_EQ ? "==" : "!=");
+    printf(" with ");
     value_inline(&self->right);
 }
 

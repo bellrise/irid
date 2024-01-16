@@ -218,6 +218,9 @@ void cpu::mainloop()
         case I_CML16:
             cml16(m_mem.read8(m_reg.ip + 1), m_mem.read16(m_reg.ip + 2));
             break;
+        case I_CFS:
+            cfs();
+            break;
         case I_JMP:
             jmp(m_mem.read16(m_reg.ip + 1));
             goto dont_step;
@@ -653,6 +656,11 @@ void cpu::cml8(u8 left, u8 imm8)
 void cpu::cml16(u8 left, u16 imm16)
 {
     m_reg.cf = r_load(left) < imm16;
+}
+
+void cpu::cfs()
+{
+    m_reg.cf = !m_reg.cf;
 }
 
 void cpu::jmp(u16 addr)
