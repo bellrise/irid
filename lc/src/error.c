@@ -74,7 +74,7 @@ void source_error(struct tokens *tokens, const char *here, int here_len,
             fputc(' ', stdout);
         for (int i = 0; i < offset; i++)
             fputc(' ', stdout);
-        printf("\033[3;32m%s\033[0m\n    | \033[3;32m", fix_str);
+        printf("\033[3;32m%s\033[0m\n     | \033[3;32m", fix_str);
 
         for (int i = 0; i < line_off; i++)
             fputc(' ', stdout);

@@ -27,8 +27,10 @@ struct options
 
     bool w_unused_var;
 
+    bool f_block_tree;
     bool f_comment_asm;
     bool f_cmp_literal;
+    bool f_node_tree;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -122,6 +124,7 @@ enum type_type
     TYPE_INTEGER,
     TYPE_POINTER,
     TYPE_STRUCT,
+    TYPE_ARRAY,
 };
 
 /* Information about a type, like its bitwidth. */
@@ -152,6 +155,13 @@ struct type_struct
     int n_fields;
 };
 
+struct type_array
+{
+    struct type head;
+    struct type *base_type;
+    int size;
+};
+
 struct type_register
 {
     struct type **types;
@@ -173,6 +183,8 @@ int type_struct_field_offset(struct type_struct *, const char *name);
 struct type *type_register_resolve(struct type_register *, const char *name);
 struct type_pointer *type_register_add_pointer(struct type_register *,
                                                struct type *base_type);
+struct type_array *type_register_add_array(struct type_register *,
+                                           struct type *base_type, int count);
 struct type_struct *type_register_alloc_struct(struct type_register *,
                                                const char *name);
 
@@ -184,6 +196,7 @@ struct parsed_type
     char *name;
     bool is_pointer;
     struct tok *place;
+    int count;
 };
 
 struct parsed_type_register
@@ -291,6 +304,7 @@ struct type_field
 {
     struct parsed_type *parsed_type;
     char *name;
+    int count;
 };
 
 struct node_type_decl
@@ -495,21 +509,22 @@ enum value_type
 struct value
 {
     int value_type;
-    struct tok *place;
-    int local_offset;
-    struct type *field_type;
-    bool deref;
-    struct value *index_offset;
-    int index_elem_size;
-    struct type *cast_type;
+    struct tok *place;          /* place where the value is defined */
+    int local_offset;           /* offset into the local value */
+    struct type *field_type;    /* type of the struct field */
+    bool deref;                 /* if we need to dereference before reading */
+    struct value *index_offset; /* index offset into a pointer */
+    int index_elem_size;        /* size of a single element */
+    struct type *cast_type;     /* type to cast to */
+    bool decay_into_pointer;    /* true if the value decays into a pointer */
     union
     {
-        struct imm imm_value;
-        struct local *local_value;
-        struct value *index_var;
-        char *label_value;
-        int string_id_value;
-        struct op_value op_value;
+        struct imm imm_value;      /* immediate value */
+        struct local *local_value; /* reference to a local/global */
+        struct value *index_var;   /* indexed local (pointer or array) */
+        char *label_value;         /* literal label */
+        int string_id_value;       /* string literal */
+        struct op_value op_value;  /* operation, like addition or comparison */
     };
 };
 

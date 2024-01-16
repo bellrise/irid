@@ -138,7 +138,15 @@ static void store_value_into_register(struct emitter *self, int register_id,
     else if (value->value_type == VALUE_LOCAL
              || value->value_type == VALUE_GLOBAL) {
         store_value_addr_into_register(self, R_R4, value);
-        fprintf(self->out, "    load %s, r4\n", register_name(register_id));
+
+        /* In the case that the value decays into a pointer, store the pointer
+           value to the register, skipping the `load` part (which loads the
+           value at the pointer).  */
+
+        if (value->decay_into_pointer)
+            fprintf(self->out, "    mov %s, r4\n", register_name(register_id));
+        else
+            fprintf(self->out, "    load %s, r4\n", register_name(register_id));
     }
 
     else if (value->value_type == VALUE_STRING) {

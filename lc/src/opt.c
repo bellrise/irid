@@ -22,8 +22,10 @@ void opt_set_defaults(struct options *opts)
     opts->set_origin = false;
 
     opts->w_unused_var = true;
+    opts->f_block_tree = false;
     opts->f_comment_asm = false;
     opts->f_cmp_literal = true;
+    opts->f_node_tree = false;
 }
 
 static void warn_opt(struct options *opts, const char *name)
@@ -48,10 +50,14 @@ static void func_opt(struct options *opts, const char *name)
         set_mode = false;
     }
 
+    if (!strcmp(name, "block-tree"))
+        opts->f_block_tree = set_mode;
     if (!strcmp(name, "comment-asm"))
         opts->f_comment_asm = set_mode;
     if (!strcmp(name, "cmp-literal"))
         opts->f_cmp_literal = set_mode;
+    if (!strcmp(name, "node-tree"))
+        opts->f_node_tree = set_mode;
 }
 
 void opt_parse(struct options *opts, int argc, char **argv)
@@ -114,8 +120,10 @@ void usage()
            "  -o, --output OUTPUT   select output file\n"
            "  -v, --version         show the version and exit\n"
            "  -Wunused-var          unused variables\n"
+           "  -fblock-tree          show the compiled block tree\n"
            "  -fcomment-asm         add comments to the generated assembly\n"
-           "  -fcmp-literal         optimize comparing with literals\n");
+           "  -fcmp-literal         optimize comparing with literals\n"
+           "  -fnode-tree           show the parsed node tree\n");
 
     fputc('\n', stdout);
 }

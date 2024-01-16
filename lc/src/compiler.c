@@ -51,8 +51,13 @@ static struct type *make_real_type(struct compiler *self,
         ce(self, parsed_type->place, "unknown type");
 
     if (parsed_type->is_pointer) {
-        return (struct type *) type_register_add_pointer(self->types,
-                                                         base_type);
+        base_type =
+            (struct type *) type_register_add_pointer(self->types, base_type);
+    }
+
+    if (parsed_type->count) {
+        base_type = (struct type *) type_register_add_array(
+            self->types, base_type, parsed_type->count);
     }
 
     return base_type;
@@ -441,8 +446,10 @@ static void compile_assign(struct compiler *self, struct block_func *func,
     var = (struct node_label *) assign_node->child;
     if (var->head.type == NODE_LITERAL)
         ce(self, var->head.place, "cannot assign to literal value");
-    if (var->head.type != NODE_LABEL && var->head.type != NODE_FIELD)
+
+    if (var->head.type != NODE_LABEL && var->head.type != NODE_FIELD) {
         ce(self, var->head.place, "expected a variable or structure field");
+    }
 
     if (var->head.type == NODE_FIELD) {
         return compile_assign_field(self, func, assign_node,
@@ -519,25 +526,31 @@ static struct type *resolve_value_type(struct compiler *self, struct value *val)
     struct type *resolved_type;
 
     if (val->cast_type)
-        return val->cast_type;
+        resolved_type = val->cast_type;
 
     switch (val->value_type) {
     case VALUE_IMMEDIATE:
-        return type_register_resolve(self->types, "int");
+        resolved_type = type_register_resolve(self->types, "int");
+        break;
 
     case VALUE_STRING:
-        return (struct type *) type_register_add_pointer(
+        resolved_type = (struct type *) type_register_add_pointer(
             self->types, type_register_resolve(self->types, "char"));
+        break;
 
     case VALUE_GLOBAL:
     case VALUE_LOCAL:
         if (val->field_type)
-            return val->field_type;
-        return val->local_value->type;
+            resolved_type = val->field_type;
+        else
+
+            resolved_type = val->local_value->type;
+        break;
 
     case VALUE_ADDR:
-        return (struct type *) type_register_add_pointer(
+        resolved_type = (struct type *) type_register_add_pointer(
             self->types, val->local_value->type);
+        break;
 
     case VALUE_INDEX:
         resolved_type = resolve_value_type(self, val->index_var);
@@ -547,13 +560,58 @@ static struct type *resolve_value_type(struct compiler *self, struct value *val)
         if (resolved_type->type != TYPE_POINTER)
             die("cannot resolve_value_type of non-pointer VALUE_INDEX");
 
-        return ((struct type_pointer *) resolved_type)->base_type;
+        resolved_type = ((struct type_pointer *) resolved_type)->base_type;
+        break;
 
     case VALUE_OP:
-        return resolve_value_type(self, val->op_value.left);
+        resolved_type = resolve_value_type(self, val->op_value.left);
+        break;
 
     default:
         return NULL;
+    }
+
+    /* Possibly decay the array into a pointer. */
+
+    if (val->decay_into_pointer && resolved_type->type == TYPE_ARRAY) {
+        resolved_type = (struct type *) type_register_add_pointer(
+            self->types, ((struct type_array *) resolved_type)->base_type);
+    }
+
+    return resolved_type;
+}
+
+static int min(int a, int b)
+{
+    return a < b ? a : b;
+}
+
+static void decay_arrays_to_pointers(struct compiler *self,
+                                     struct block_call *call_block,
+                                     struct func_sig *func)
+{
+    struct type_array *array_type;
+    struct type_pointer *pointer_type;
+    struct type *arg_type;
+    struct value *arg;
+    int check_args;
+
+    check_args = min(call_block->n_args, func->n_params);
+
+    for (int i = 0; i < check_args; i++) {
+        arg = &call_block->args[i];
+        arg_type = resolve_value_type(self, arg);
+
+        if (arg_type->type != TYPE_ARRAY
+            || func->param_types[i]->type != TYPE_POINTER) {
+            continue;
+        }
+
+        array_type = (struct type_array *) arg_type;
+        pointer_type = (struct type_pointer *) func->param_types[i];
+
+        if (type_cmp(array_type->base_type, pointer_type->base_type))
+            arg->decay_into_pointer = true;
     }
 }
 
@@ -642,6 +700,7 @@ static void compile_call(struct compiler *self, struct block_func *func,
         arg = arg->next;
     }
 
+    decay_arrays_to_pointers(self, call_block, func_sig);
     validate_call_args(self, (struct node_call *) call, call_block, func_sig);
 
     block_add_child((struct block *) func, (struct block *) call_block);
@@ -1105,5 +1164,6 @@ void compiler_compile(struct compiler *self)
         block_add_child(self->file_block, (struct block *) self->strings[i]);
     }
 
-    block_tree_dump(self->file_block);
+    if (self->opts->f_block_tree)
+        block_tree_dump(self->file_block);
 }

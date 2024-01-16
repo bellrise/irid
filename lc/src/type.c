@@ -3,6 +3,7 @@
 
 #include "lc.h"
 
+#include <irid/arch.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +22,9 @@ void *type_alloc(struct type_register *self, int kind)
         break;
     case TYPE_STRUCT:
         alloc_size = sizeof(struct type_struct);
+        break;
+    case TYPE_ARRAY:
+        alloc_size = sizeof(struct type_array);
         break;
     default:
         alloc_size = sizeof(struct type);
@@ -60,6 +64,10 @@ void type_dump_level(struct type *self, int level)
         for (int i = 0; i < struct_type->n_fields; i++)
             type_dump_level(struct_type->field_types[i], level + 1);
         break;
+    case TYPE_ARRAY:
+        printf("[%d]\n", ((struct type_array *) self)->size);
+        type_dump_level(((struct type_array *) self)->base_type, level + 1);
+        break;
     default:
         fputc('\n', stdout);
     }
@@ -78,19 +86,30 @@ void parsed_type_dump_inline(struct parsed_type *self)
     }
 
     printf("\033[31m%s%s\033[0m", self->name, self->is_pointer ? "&" : "");
+
+    if (self->count)
+        printf("[%d]", self->count);
 }
 
 const char *type_kind_name(int type_kind)
 {
-    const char *names[] = {"NULL", "INTEGER", "POINTER", "STRUCT"};
+    const char *names[] = {"NULL", "INTEGER", "POINTER", "STRUCT", "ARRAY"};
     return names[type_kind];
 }
 
 const char *type_repr(struct type *self)
 {
+    struct type_array *array;
     char *name;
 
     name = ac_alloc(global_ac, 64);
+
+    if (self->type == TYPE_ARRAY) {
+        array = (struct type_array *) self;
+        snprintf(name, 64, "%s[%d]", type_repr(array->base_type), array->size);
+        return name;
+    }
+
     snprintf(name, 64, "%s%s", self->name,
              self->type == TYPE_POINTER ? "&" : "");
 
@@ -115,18 +134,26 @@ bool type_cmp(struct type *self, struct type *other)
 int type_size(struct type *self)
 {
     struct type_struct *struct_type;
+    struct type_array *array_type;
     int total_size;
 
     if (self->type == TYPE_INTEGER)
         return ((struct type_integer *) self)->bit_width >> 3;
+
     if (self->type == TYPE_POINTER)
-        return 2;
+        return IRID_PTR_WIDTH >> 3;
+
     if (self->type == TYPE_STRUCT) {
         total_size = 0;
         struct_type = (struct type_struct *) self;
         for (int i = 0; i < struct_type->n_fields; i++)
             total_size += type_size(struct_type->field_types[i]);
         return total_size;
+    }
+
+    if (self->type == TYPE_ARRAY) {
+        array_type = (struct type_array *) self;
+        return type_size(array_type->base_type) * array_type->size;
     }
 
     die("cannot calculate type_size for %s", type_kind_name(self->type));
@@ -211,6 +238,28 @@ struct type_pointer *type_register_add_pointer(struct type_register *self,
     pointer_type->head.name = base_type->name;
 
     return pointer_type;
+}
+
+struct type_array *type_register_add_array(struct type_register *self,
+                                           struct type *base_type, int count)
+{
+    struct type_array *type;
+
+    for (int i = 0; i < self->n_types; i++) {
+        if (self->types[i]->type == TYPE_ARRAY) {
+            type = (struct type_array *) self->types[i];
+
+            if (type_cmp(type->base_type, base_type) && type->size == count)
+                return type;
+        }
+    }
+
+    type = type_alloc(self, TYPE_ARRAY);
+    type->base_type = base_type;
+    type->head.name = base_type->name;
+    type->size = count;
+
+    return type;
 }
 
 struct type_struct *type_register_alloc_struct(struct type_register *self,

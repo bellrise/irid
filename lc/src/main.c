@@ -38,6 +38,9 @@ int main(int argc, char **argv)
     parser->tokens = tokens;
     parser_parse(parser);
 
+    if (opts.f_node_tree)
+        node_tree_dump(parser->tree);
+
     compiler.tree = parser->tree;
     compiler.file_block = NULL;
     compiler.tokens = tokens;

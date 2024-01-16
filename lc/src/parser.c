@@ -784,6 +784,8 @@ static void parse_type_decl_body(struct parser *self,
 {
     struct parsed_type *field_type;
     struct tok *tok;
+    char *tmpstr;
+    char *name;
 
     tok = tokcur(self);
 
@@ -804,10 +806,26 @@ static void parse_type_decl_body(struct parser *self,
         if (tok->type != TOK_SYM)
             pe(self, tok, "expected name of field");
 
-        type_decl_add_field(type_decl, field_type,
-                            string_copy(tok->pos, tok->len));
+        name = string_copy(tok->pos, tok->len);
 
         tok = toknext(self);
+        if (tok->type == TOK_LBRACKET) {
+            tok = toknext(self);
+            if (tok->type != TOK_NUM)
+                pe(self, tok, "expected an array size");
+
+            tmpstr = string_copy(tok->pos, tok->len);
+            field_type->count = strtol(tmpstr, NULL, 0);
+
+            tok = toknext(self);
+            if (tok->type != TOK_RBRACKET)
+                pef(self, tok, "]", "expected ending bracket");
+
+            tok = toknext(self);
+        }
+
+        type_decl_add_field(type_decl, field_type, name);
+
         if (tok->type == TOK_RBRACE)
             break;
 
@@ -874,6 +892,4 @@ void parser_parse(struct parser *self)
 
         self->sel_tok++;
     }
-
-    node_tree_dump(self->tree);
 }
