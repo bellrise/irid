@@ -217,6 +217,7 @@ void *ac_realloc(struct allocator *, void *addr, size_t bytes);
 
 void allocator_init(struct allocator *);
 void allocator_free_all(struct allocator *);
+void allocator_dump(struct allocator *);
 
 /* -- parser.c -- */
 

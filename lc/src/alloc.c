@@ -37,6 +37,20 @@ void allocator_free_all(struct allocator *self)
     self->space = 0;
 }
 
+void allocator_dump(struct allocator *self)
+{
+    size_t total;
+
+    total = 0;
+
+    for (size_t i = 0; i < self->size; i++) {
+        printf("ac: A %zu\n", self->allocs[i]->size);
+        total += self->allocs[i]->size;
+    }
+
+    printf("ac_total: %zu\n", total);
+}
+
 void *ac_alloc(struct allocator *self, size_t bytes)
 {
     struct ac_allocation *alloc;
