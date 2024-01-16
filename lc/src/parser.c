@@ -209,13 +209,13 @@ static void parse_var_decl(struct parser *self, struct node *parent,
         pef(self, tok, "int", "expected variable type");
 
     decl = node_alloc(parent, NODE_VAR_DECL);
-    decl->head.place = tokpeek(self);
     decl->var_type = parse_type(self);
 
     tok = toknext(self);
     if (tok->type != TOK_SYM)
         pef(self, tok, "var", "expected variable name");
 
+    decl->head.place = tok;
     decl->name = string_copy(tok->pos, tok->len);
 
     if (end_with_semicolon) {

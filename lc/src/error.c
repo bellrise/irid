@@ -68,7 +68,7 @@ void source_error(struct tokens *tokens, const char *here, int here_len,
     }
 
     if (fix_str) {
-        printf("    | ");
+        printf("     | ");
         line_off = offset + (int) ((size_t) here - (size_t) line_start);
         for (int i = 0; i < line_off; i++)
             fputc(' ', stdout);
@@ -86,12 +86,12 @@ void source_error(struct tokens *tokens, const char *here, int here_len,
     }
 
     else {
-        printf("    |\n");
+        printf("     |\n");
     }
 
     len = line_len(line_start);
 
-    printf("% 3d | ", line_num);
+    printf("% 4d | ", line_num);
 
     len = here - line_start;
     printf("%.*s", len, line_start);
@@ -100,7 +100,7 @@ void source_error(struct tokens *tokens, const char *here, int here_len,
     len = line_len(here + here_len);
     printf("%.*s", len, here + here_len);
 
-    printf("\n    | %s", color);
+    printf("\n     | %s", color);
 
     line_off = offset + (int) ((size_t) here - (size_t) line_start);
     for (int i = 0; i < line_off; i++)
@@ -119,7 +119,7 @@ void source_error(struct tokens *tokens, const char *here, int here_len,
     printf("\033[0m\n");
 
     if (help_str)
-        printf("    |\n    | \033[36m%s\033[0m\n", help_str);
+        printf("     |\n     | \033[36m%s\033[0m\n", help_str);
 
     fputc('\n', stdout);
 }
