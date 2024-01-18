@@ -1,7 +1,0 @@
--Wall
--Wextra
--I../include
--O0
--ggdb
--DDEBUG=1
--xc

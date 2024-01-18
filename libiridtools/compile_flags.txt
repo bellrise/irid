@@ -1,9 +1,0 @@
--Wall
--Wextra
--std=c++2a
--I./include
--I../include
--O0
--ggdb
--DDEBUG=1
--xc++

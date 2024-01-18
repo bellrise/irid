@@ -11,6 +11,7 @@
 #define IRID_MAX_PAGES      (IRID_MAX_ADDR + 1) / IRID_PAGE_SIZE
 #define IRID_PAGE_SIZE_BITS 10
 #define IRID_PAGE_MASK      0xfc00
+#define IRID_PTR_WIDTH      16
 
 /*
  * Irid regular int & half int. All full 16-bit registers use the rint type

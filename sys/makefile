@@ -15,7 +15,7 @@ test.i: ../lc/test.lf
 build/sys: build/test.o build/io.o build/sh.o build/string.o build/mem.o build/entry.o build/cpucall.o
 	irid-ld -o build/sys $(shell find build/ -name '*.o')
 
-run:
+run: all
 	@irid-emul build/sys
 
 clean:

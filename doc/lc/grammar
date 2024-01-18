@@ -29,13 +29,13 @@ type:
     | symbol [ '&' ]
 
 type-body:
-    | ( type symbol ';' )*
+    | ( type symbol [ '[' NUMBER ']' ] ';' )*
 
 func-body:
     | ( ( var-decl | expr | assign | return ) ';' | ( for-loop | if-else ))*
 
 var-decl:
-    | 'let' type symbol
+    | 'let' type symbol [ '[' NUMBER ']' ]
 
 expr:
     | '(' ( expr | assign | math-op ) ')'

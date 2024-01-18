@@ -7,3 +7,4 @@ lc/build
 *.out
 *.iof
 *.o
+compile_flags.txt
