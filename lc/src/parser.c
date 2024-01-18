@@ -218,6 +218,22 @@ static void parse_var_decl(struct parser *self, struct node *parent,
     decl->head.place = tok;
     decl->name = string_copy(tok->pos, tok->len);
 
+    tok = tokpeek(self);
+    if (tok->type == TOK_LBRACKET) {
+        tok = toknext(self);
+        tok = toknext(self);
+
+        if (tok->type != TOK_NUM)
+            pe(self, tok, "expected array size");
+
+        decl->var_type->count =
+            strtol(string_copy(tok->pos, tok->len), NULL, 0);
+
+        tok = toknext(self);
+        if (tok->type != TOK_RBRACKET)
+            pe(self, tok, "missing closing bracket for array size");
+    }
+
     if (end_with_semicolon) {
         tok = toknext(self);
         if (tok->type != TOK_SEMICOLON)
@@ -383,6 +399,8 @@ static struct node *parse_expr_inside(struct parser *self, struct node *parent)
     /* Now, the complicated part starts. We have to check for any operators
        after the first value. This means that the expression at hand is a
        complex expression which is either a two-hand operation, or a call. */
+
+    tok = tokpeek(self);
 
     /* expr '.' symbol */
 

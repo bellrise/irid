@@ -88,7 +88,7 @@ void parsed_type_dump_inline(struct parsed_type *self)
     printf("\033[31m%s%s\033[0m", self->name, self->is_pointer ? "&" : "");
 
     if (self->count)
-        printf("[%d]", self->count);
+        printf("\033[31m[%d]\033[0m", self->count);
 }
 
 const char *type_kind_name(int type_kind)
@@ -158,6 +158,17 @@ int type_size(struct type *self)
 
     die("cannot calculate type_size for %s", type_kind_name(self->type));
     return 0;
+}
+
+int type_element_size(struct type *self)
+{
+    if (self->type == TYPE_POINTER)
+        return type_size(((struct type_pointer *) self)->base_type);
+
+    if (self->type == TYPE_ARRAY)
+        return type_size(((struct type_array *) self)->base_type);
+
+    return type_size(self);
 }
 
 void type_struct_add_field(struct type_struct *self, struct type *type,

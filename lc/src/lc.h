@@ -175,6 +175,7 @@ const char *type_repr(struct type *);
 bool type_is_null(struct type *);
 bool type_cmp(struct type *, struct type *);
 int type_size(struct type *);
+int type_element_size(struct type *);
 void type_struct_add_field(struct type_struct *, struct type *type,
                            const char *name);
 struct type *type_struct_find_field(struct type_struct *, const char *name);
@@ -531,9 +532,10 @@ struct value
 struct block_store
 {
     struct block head;
-    struct local *var;
-    struct value value;
-    int store_offset;
+    struct local *local; /* local to assign to */
+    struct value value;  /* value to assign */
+    int store_offset;    /* offset into the variable */
+    struct value *index; /* value of index, NULL for no index */
 };
 
 struct block_string

@@ -168,7 +168,15 @@ static void value_inline(struct value *val)
 
 static void store_info(struct block_store *self)
 {
-    printf(" %s +%d = ", self->var->name, self->store_offset);
+    printf(" %s +%d", self->local->name, self->store_offset);
+
+    if (self->index) {
+        fputc('[', stdout);
+        value_inline(self->index);
+        fputc(']', stdout);
+    }
+
+    printf(" = ");
     value_inline(&self->value);
 }
 
@@ -180,7 +188,7 @@ static void store_return_info(struct block_store *self)
 
 static void store_result_info(struct block_store *self)
 {
-    printf(" %s", self->var->name);
+    printf(" %s", self->local->name);
 }
 
 static void store_arg_info(struct block_store_arg *self)

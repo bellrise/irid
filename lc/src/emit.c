@@ -8,7 +8,8 @@
 static void store_value_into_register(struct emitter *self, int register_id,
                                       struct value *value);
 static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct local *local, int offset);
+                                      struct local *local, int offset,
+                                      struct value *index);
 
 static void emit_func_preamble(struct emitter *self, struct block_func *func)
 {
@@ -166,21 +167,25 @@ static void store_value_into_register(struct emitter *self, int register_id,
     }
 
     else if (value->value_type == VALUE_INDEX) {
-        /* Get the pointer to the value, and then calculate the offset required,
-           which means multiplying the index by the size of a single element. */
+        /* We can do indexing in 2 different ways. We can either offset from a
+           given pointer, or offset from the value itself (this is the case in
+           arrays). */
+
+        /* Calculate the offset into the pointer first. */
 
         store_value_into_register(self, R_R6, value->index_offset);
-
-        /* multiply by the element size */
         fprintf(self->out, "    mul r6, %d\n", value->index_elem_size);
 
-        /* r4 is the base pointer */
-        store_value_into_register(self, R_R4, value->index_var);
+        /* If we have a pointer, the base pointer is the value of the pointer.
+           Otherwise, the location of the variable is the base pointer. */
 
-        /* offset the base pointer */
+        if (value->deref)
+            store_value_into_register(self, R_R4, value->index_var);
+        else
+            store_value_addr_into_register(self, R_R4, value->index_var);
+
+        /* Offset, and read the value at the address. */
         fprintf(self->out, "    add r4, r6\n");
-
-        /* read the value at index */
         fprintf(self->out, "    load %s, r4\n", register_name(register_id));
 
         /* If the value we want to store is a single byte, remember to cut off
@@ -198,28 +203,41 @@ static void store_value_into_register(struct emitter *self, int register_id,
 }
 
 static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct local *local, int offset)
+                                      struct local *local, int offset,
+                                      struct value *index)
 {
+    int access_offset;
+
     if (local->is_global) {
         fprintf(self->out, "    mov r4, _G_%s\n", local->name);
         fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+        return;
     }
 
-    else {
-        fprintf(self->out, "    mov r4, bp\n");
-        fprintf(self->out, "    sub r4, %d\n",
-                local->local_block->emit_offset - offset);
+    access_offset = local->local_block->emit_offset - offset;
+
+    if (index) {
+        store_value_into_register(self, R_R4, index);
+        fprintf(self->out, "    mul r4, %d\n", type_element_size(local->type));
+        fprintf(self->out, "    add r4, bp\n");
+        fprintf(self->out, "    sub r4, %d\n", access_offset);
         fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+        return;
     }
+
+    fprintf(self->out, "    mov r4, bp\n");
+    fprintf(self->out, "    sub r4, %d\n", access_offset);
+    fprintf(self->out, "    store %s, r4\n", register_name(register_id));
 }
 
 static void emit_store(struct emitter *self, struct block_store *store)
 {
     if (self->opts->f_comment_asm)
-        fprintf(self->out, "    ; store %s\n", store->var->name);
+        fprintf(self->out, "    ; store %s\n", store->local->name);
 
     store_value_into_register(self, R_R5, &store->value);
-    store_register_into_local(self, R_R5, store->var, store->store_offset);
+    store_register_into_local(self, R_R5, store->local, store->store_offset,
+                              store->index);
 }
 
 static void emit_call(struct emitter *self, struct block_call *func)
@@ -288,14 +306,15 @@ static void emit_store_return(struct emitter *self,
 static void emit_store_result(struct emitter *self,
                               struct block_store *store_return)
 {
-    store_register_into_local(self, R_R0, store_return->var,
-                              store_return->store_offset);
+    store_register_into_local(self, R_R0, store_return->local,
+                              store_return->store_offset, NULL);
 }
 
 static void emit_store_arg(struct emitter *self,
                            struct block_store_arg *store_arg)
 {
-    store_register_into_local(self, R_R0 + store_arg->arg, store_arg->local, 0);
+    store_register_into_local(self, R_R0 + store_arg->arg, store_arg->local, 0,
+                              NULL);
 }
 
 static void emit_func(struct emitter *self, struct block_func *func)
