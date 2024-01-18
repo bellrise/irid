@@ -63,9 +63,56 @@ static void pop(struct emitter *self, int register_id)
     fprintf(self->out, "    pop %s\n", register_name(register_id));
 }
 
+static void fold_constants(struct emitter *self, int result_register,
+                           struct op_value *op)
+{
+    int result;
+    int left;
+    int right;
+
+    left = op->left->imm_value.value;
+    right = op->right->imm_value.value;
+
+    switch (op->type) {
+    case OP_ADD:
+        result = left + right;
+        break;
+    case OP_SUB:
+        result = left - right;
+        break;
+    case OP_MUL:
+        result = left * right;
+        break;
+    case OP_DIV:
+        result = left / right;
+        break;
+    case OP_CMPEQ:
+        result = left == right;
+        break;
+    case OP_CMPNEQ:
+        result = left != right;
+        break;
+    default:
+        die("no idea how to constant-fold OP=%d", op->type);
+        return;
+    }
+
+    fprintf(self->out, "    mov %s, %d\n", register_name(result_register),
+            result);
+}
+
 static void emit_op(struct emitter *self, int result_register,
                     struct op_value *op)
 {
+    /* Maybe fold constants operations. */
+
+    if (self->opts->f_fold_constants) {
+        if (op->left->value_type == VALUE_IMMEDIATE
+            && op->right->value_type == VALUE_IMMEDIATE) {
+            return fold_constants(self, result_register, op);
+        }
+    }
+
     /* We are on a mission now. Our goal is to place the calculated value into
        the result register. First, we calculate the right side of the operation
        and push that value onto the stack. */

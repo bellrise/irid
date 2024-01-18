@@ -90,6 +90,7 @@ void compile_func(struct compiler *self, struct node_func_def *func)
     struct block_func *func_block;
     struct block_label *exit_label;
     struct node *node_walker;
+    int node_type;
 
     func_block = block_alloc(self->file_block, BLOCK_FUNC);
     func_block->label = string_copy_z(func->decl->name);
@@ -113,6 +114,27 @@ void compile_func(struct compiler *self, struct node_func_def *func)
        which we need to allocate space for. */
 
     add_local_blocks(func_block);
+
+    /* If the function has a declared return value, and the last node is not a
+       return node, issue a warning. */
+
+    if (func->decl->return_type) {
+        node_walker = func->head.child;
+        if (!node_walker) {
+            node_type = NODE_NULL;
+        } else {
+            while (node_walker->next)
+                node_walker = node_walker->next;
+            node_type = node_walker->type;
+        }
+
+        if (node_type != NODE_RETURN) {
+            cn(self, func->decl->return_type->place, "%s returns %s",
+               func->decl->name, parsed_type_repr(func->decl->return_type));
+            cw(self, func->decl->head.place,
+               "missing return statement at the end of this function");
+        }
+    }
 
     exit_label = block_alloc((struct block *) func_block, BLOCK_LABEL);
     exit_label->label = string_copy_z("E");

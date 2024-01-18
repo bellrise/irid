@@ -22,6 +22,15 @@ void cw(struct compiler *self, struct tok *place, const char *fmt, ...)
     va_end(args);
 }
 
+void cn(struct compiler *self, struct tok *place, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    source_error(self->tokens, place->pos, place->len, 0, NULL, NULL, "notice",
+                 "\033[36m", fmt, args);
+    va_end(args);
+}
+
 void ceh(struct compiler *self, struct tok *place, const char *help_msg,
          const char *fmt, ...)
 {

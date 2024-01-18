@@ -12,6 +12,7 @@
 
 void ce(struct compiler *self, struct tok *place, const char *fmt, ...);
 void cw(struct compiler *self, struct tok *place, const char *fmt, ...);
+void cn(struct compiler *self, struct tok *place, const char *fmt, ...);
 void ceh(struct compiler *self, struct tok *place, const char *help_msg,
          const char *fmt, ...);
 

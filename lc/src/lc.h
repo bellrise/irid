@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #define LC_VER_MAJ 0
-#define LC_VER_MIN 6
+#define LC_VER_MIN 7
 
 struct allocator;
 extern struct allocator *global_ac;
@@ -31,6 +31,7 @@ struct options
     bool f_comment_asm;
     bool f_cmp_literal;
     bool f_node_tree;
+    bool f_fold_constants;
 };
 
 void opt_set_defaults(struct options *opts);
@@ -208,6 +209,7 @@ struct parsed_type_register
 
 struct parsed_type *parsed_type_register_new(struct parsed_type_register *,
                                              const char *name, bool is_pointer);
+const char *parsed_type_repr(struct parsed_type *);
 void parsed_type_dump_inline(struct parsed_type *);
 
 /* -- alloc.c -- */
@@ -458,6 +460,12 @@ struct block_global
 {
     struct block head;
     struct local *local;
+};
+
+struct block_marker
+{
+    struct block head;
+    char *marker;
 };
 
 enum imm_width_type

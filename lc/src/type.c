@@ -78,6 +78,22 @@ void type_dump(struct type *self)
     type_dump_level(self, 0);
 }
 
+const char *parsed_type_repr(struct parsed_type *self)
+{
+    char *name;
+
+    name = ac_alloc(global_ac, 64);
+
+    if (self->count) {
+        snprintf(name, 64, "%s%s[%d]", self->name, self->is_pointer ? "&" : "",
+                 self->count);
+        return name;
+    }
+
+    snprintf(name, 64, "%s%s", self->name, self->is_pointer ? "&" : "");
+    return name;
+}
+
 void parsed_type_dump_inline(struct parsed_type *self)
 {
     if (self == NULL) {

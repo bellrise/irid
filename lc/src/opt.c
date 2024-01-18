@@ -26,6 +26,7 @@ void opt_set_defaults(struct options *opts)
     opts->f_comment_asm = false;
     opts->f_cmp_literal = true;
     opts->f_node_tree = false;
+    opts->f_fold_constants = true;
 }
 
 static void warn_opt(struct options *opts, const char *name)
@@ -58,6 +59,8 @@ static void func_opt(struct options *opts, const char *name)
         opts->f_cmp_literal = set_mode;
     if (!strcmp(name, "node-tree"))
         opts->f_node_tree = set_mode;
+    if (!strcmp(name, "fold-constants"))
+        opts->f_fold_constants = set_mode;
 }
 
 void opt_parse(struct options *opts, int argc, char **argv)
@@ -121,6 +124,7 @@ void usage()
            "  -v, --version         show the version and exit\n"
            "  -Wunused-var          unused variables\n"
            "  -fblock-tree          show the compiled block tree\n"
+           "  -ffold-constants      pre-calculate constant operations\n"
            "  -fcomment-asm         add comments to the generated assembly\n"
            "  -fcmp-literal         optimize comparing with literals\n"
            "  -fnode-tree           show the parsed node tree\n");
