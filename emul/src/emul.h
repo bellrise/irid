@@ -22,6 +22,26 @@
 #define die(...)  _die_impl("irid-emul", __VA_ARGS__)
 #define warn(...) _warn_impl("irid-emul", __VA_ARGS__)
 
+struct image_argument
+{
+    char path[256];
+    int offset;
+};
+
+struct serial_argument
+{
+    std::string name;
+    std::string file;
+};
+
+struct settings
+{
+    std::vector<image_argument> images;
+    std::vector<serial_argument> serials;
+    bool show_perf_results;
+    int target_ips;
+};
+
 /* Thrown on a CPU fault. */
 struct cpu_fault
 {
@@ -190,13 +210,13 @@ struct cpu
 struct device
 {
     u16 id;
-    u16 handlerptr;
-    const char *name;
+    u16 interrupt_ptr;
+    const std::string& name;
 
     /* For device state. */
     void *state;
 
-    device(u16 id, const char *name);
+    device(u16 id, const std::string& name);
 
     std::function<void(device&)> close;
     std::function<void(device&, u8)> write;
@@ -220,3 +240,7 @@ int _info_impl(const char *prog, const char *func, const char *fmt, ...);
 #define CCTL_SIZE 0x01
 
 device console_create(int in, int out);
+
+/* serial */
+
+device serial_create(u16 id, const std::string& name, const std::string& file);

@@ -3,8 +3,8 @@
 
 #include "emul.h"
 
-device::device(u16 id, const char *name)
+device::device(u16 id, const std::string& name)
     : id(id)
-    , handlerptr(0)
+    , interrupt_ptr(0)
     , name(name)
 { }

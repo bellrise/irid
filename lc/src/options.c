@@ -15,7 +15,7 @@
 static void short_usage();
 static void usage();
 
-void opt_set_defaults(struct options *opts)
+void options_set_defaults(struct options *opts)
 {
     opts->output = NULL;
     opts->input = NULL;
@@ -63,7 +63,7 @@ static void func_opt(struct options *opts, const char *name)
         opts->f_fold_constants = set_mode;
 }
 
-void opt_parse(struct options *opts, int argc, char **argv)
+void options_parse(struct options *opts, int argc, char **argv)
 {
     int opt_index;
     int c;
@@ -132,7 +132,7 @@ void usage()
     fputc('\n', stdout);
 }
 
-void opt_add_missing_opts(struct options *opts)
+void options_add_missing_opts(struct options *opts)
 {
     static char output_filename[PATH_MAX];
     char buf[NAME_MAX];

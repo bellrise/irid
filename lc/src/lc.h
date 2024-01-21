@@ -4,19 +4,21 @@
 #ifndef LC_H
 #define LC_H
 
+#include <irid/arch.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #define LC_VER_MAJ 0
-#define LC_VER_MIN 7
+#define LC_VER_MIN 8
 
 struct allocator;
 extern struct allocator *global_ac;
 
 #define MAX_ARG 4
 
-/* -- opt.c -- */
+/* -- options.c -- */
 
 struct options
 {
@@ -34,9 +36,9 @@ struct options
     bool f_fold_constants;
 };
 
-void opt_set_defaults(struct options *opts);
-void opt_parse(struct options *opts, int argc, char **argv);
-void opt_add_missing_opts(struct options *opts);
+void options_set_defaults(struct options *opts);
+void options_parse(struct options *opts, int argc, char **argv);
+void options_add_missing_opts(struct options *opts);
 
 /* -- file.c -- */
 
@@ -639,6 +641,8 @@ void compiler_compile(struct compiler *);
 
 /* -- emit.c -- */
 
+struct opt;
+
 struct emitter
 {
     FILE *out;
@@ -647,6 +651,64 @@ struct emitter
 };
 
 void emitter_emit(struct emitter *, struct options *opts);
+
+/* -- opt.c -- */
+
+enum instrarg_type
+{
+    INSTRARG_NULL,
+    INSTRARG_REG,
+    INSTRARG_IMM,
+    INSTRARG_LABEL
+};
+
+struct instrarg
+{
+    int type;
+    union
+    {
+        int reg;
+        int val;
+        char *label;
+    };
+};
+
+struct instr
+{
+    int type;
+    struct instrarg arg0;
+    struct instrarg arg1;
+};
+
+enum asmline_type
+{
+    ASMLINE_NULL,
+    ASMLINE_INSTR,
+    ASMLINE_FUNC,
+    ASMLINE_LABEL,
+    ASMLINE_RAW,
+};
+
+struct asmline
+{
+    int type;
+    union
+    {
+        struct instr instr;
+        char *funcname;
+        char *label;
+        char *raw;
+    };
+};
+
+struct opt
+{
+    struct asmline *lines;
+    int n_lines;
+};
+
+struct opt *opt_new();
+void opt_optimize(struct opt *);
 
 /* -- utils.c -- */
 

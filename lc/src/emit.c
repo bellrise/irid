@@ -17,6 +17,7 @@ static void emit_func_preamble(struct emitter *self, struct block_func *func)
     fprintf(self->out, "    push r4\n");
     fprintf(self->out, "    push r5\n");
     fprintf(self->out, "    push r6\n");
+    fprintf(self->out, "    push r7\n");
     fprintf(self->out, "    mov bp, sp\n");
     func->emit_locals_size = 0;
 }
@@ -24,6 +25,7 @@ static void emit_func_preamble(struct emitter *self, struct block_func *func)
 static void emit_func_epilogue(struct emitter *self)
 {
     fprintf(self->out, "    mov sp, bp\n");
+    fprintf(self->out, "    pop r7\n");
     fprintf(self->out, "    pop r6\n");
     fprintf(self->out, "    pop r5\n");
     fprintf(self->out, "    pop r4\n");

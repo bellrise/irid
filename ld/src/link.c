@@ -290,7 +290,7 @@ static void link_section(struct ld_linker *self, struct ld_section_entry *entry)
         }
 
         if (!symbol)
-            die("`%s` not found", symname);
+            die("symbol `%s` not found", symname);
 
         pointer = self->output->mem + entry->region->start + linkv[i].l_addr;
         *pointer = symbol->real_addr;

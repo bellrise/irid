@@ -332,11 +332,11 @@ dont_step:
 void cpu::poll_devices()
 {
     for (size_t i = 0; i < m_devices.size(); i++) {
-        if (!m_devices[i].handlerptr || !m_devices[i].poll)
+        if (!m_devices[i].interrupt_ptr || !m_devices[i].poll)
             continue;
 
         if (m_devices[i].poll(m_devices[i]))
-            issue_interrupt(m_devices[i].handlerptr);
+            issue_interrupt(m_devices[i].interrupt_ptr);
     }
 }
 
@@ -457,8 +457,8 @@ void cpu::cpucall_deviceinfo()
 
         info.d_id = m_devices[i].id;
         memset(info.d_name, 0, 14);
-        memcpy(info.d_name, m_devices[i].name,
-               std::min((size_t) 13, strlen(m_devices[i].name)));
+        memcpy(info.d_name, m_devices[i].name.c_str(),
+               std::min((size_t) 13, m_devices[i].name.size()));
         m_mem.write_range(m_reg.r2, &info, sizeof(info));
         break;
     }
@@ -470,7 +470,7 @@ void cpu::cpucall_deviceintr()
         if (m_devices[i].id != m_reg.r1)
             continue;
 
-        m_devices[i].handlerptr = m_reg.r2;
+        m_devices[i].interrupt_ptr = m_reg.r2;
         break;
     }
 }

@@ -7,46 +7,37 @@
 #include <cstdlib>
 #include <ctype.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <poll.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
-struct image_argument
-{
-    char path[256];
-    int offset;
-};
-
-struct settings
-{
-    std::vector<image_argument> images;
-    bool show_perf_results;
-    int target_ips;
-};
-
-static void parse_args(struct settings& settings, int argc, char **argv);
+void parse_args(struct settings& settings, int argc, char **argv);
 static void load_images(const std::vector<image_argument>& images,
                         memory& memory);
 
 int main(int argc, char **argv)
 {
     struct settings settings = {};
+    u16 serial_addr;
 
     settings.target_ips = 10000;
     settings.show_perf_results = false;
 
     parse_args(settings, argc, argv);
 
-    memory ram(0x10000, IRID_PAGE_SIZE);
+    memory ram(IRID_MAX_ADDR + 1, IRID_PAGE_SIZE);
     cpu cpu(ram);
 
     cpu.set_target_ips(settings.target_ips);
 
     load_images(settings.images, ram);
     cpu.add_device(console_create(STDIN_FILENO, STDOUT_FILENO));
+
+    serial_addr = 0x100;
+    for (const serial_argument& arg : settings.serials)
+        cpu.add_device(serial_create(serial_addr++, arg.name, arg.file));
 
     /* Run the CPU. */
     cpu.start();
@@ -55,107 +46,6 @@ int main(int argc, char **argv)
         cpu.print_perf();
 
     cpu.remove_devices();
-}
-
-static void short_usage()
-{
-    puts("usage: irid-emul [-h] <image[:addr]> ...");
-}
-
-static void usage()
-{
-    short_usage();
-    puts("Emulate the Irid architecture. Loads the given images into memory\n"
-         "and starts execution from 0x0000.\n"
-         "\n"
-         "  -h, --help      show the help page\n"
-         "  -i, --ips [Hz]  target instructions per second (e.g. 1k)\n"
-         "  -p, --perf      show performace results on exit (e.g. ips)\n"
-         "  -v, --version   show the emulator version\n");
-}
-
-static int parse_int(const char *num)
-{
-    size_t len;
-    int base;
-    int c;
-
-    len = strlen(num);
-    base = 1;
-
-    if (isalpha(num[len - 1])) {
-        c = tolower(num[len - 1]);
-        if (c == 'm')
-            base = 1000000;
-        if (c == 'k')
-            base = 1000;
-    }
-
-    return base * strtol(num, NULL, 10);
-}
-
-static image_argument parse_image_argument(const char *str)
-{
-    image_argument image;
-    const char *middle;
-
-    middle = strchr(str, ':');
-    if (!middle) {
-        image.offset = 0;
-        strncpy(image.path, str, 256);
-        return image;
-    }
-
-    /* Split the image name and offset. */
-
-    image.path[middle - str] = 0;
-    strncpy(image.path, str, middle - str);
-    image.offset = strtol(middle + 1, NULL, 16);
-
-    return image;
-}
-
-void parse_args(struct settings& settings, int argc, char **argv)
-{
-    int opt_index;
-    int c;
-
-    static struct option long_opts[] = {{"help", no_argument, 0, 'h'},
-                                        {"ips", required_argument, 0, 'i'},
-                                        {"perf", no_argument, 0, 'p'},
-                                        {"version", no_argument, 0, 'v'},
-                                        {0, 0, 0, 0}};
-
-    opt_index = 0;
-
-    if (argc == 1) {
-        short_usage();
-        exit(0);
-    }
-
-    while (1) {
-        c = getopt_long(argc, argv, "hi:pv", long_opts, &opt_index);
-        if (c == -1)
-            break;
-
-        switch (c) {
-        case 'h':
-            usage();
-            exit(0);
-        case 'v':
-            printf("irid-emul %s\n", IRID_EMUL_VERSION);
-            exit(0);
-        case 'p':
-            settings.show_perf_results = true;
-            break;
-        case 'i':
-            settings.target_ips = parse_int(optarg);
-            break;
-        }
-    }
-
-    while (optind < argc)
-        settings.images.push_back(parse_image_argument(argv[optind++]));
 }
 
 static void load_images(const std::vector<image_argument>& images,
