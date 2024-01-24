@@ -27,6 +27,7 @@ void options_set_defaults(struct options *opts)
     opts->f_cmp_literal = true;
     opts->f_node_tree = false;
     opts->f_fold_constants = true;
+    opts->x_show_allocs = false;
 }
 
 static void warn_opt(struct options *opts, const char *name)
@@ -40,6 +41,19 @@ static void warn_opt(struct options *opts, const char *name)
 
     if (!strcmp(name, "unused-var"))
         opts->w_unused_var = set_mode;
+}
+
+static void extra_opt(struct options *opts, const char *name)
+{
+    bool set_mode = true;
+
+    if (!strncmp(name, "no-", 3)) {
+        name += 3;
+        set_mode = false;
+    }
+
+    if (!strcmp(name, "show-allocs"))
+        opts->x_show_allocs = set_mode;
 }
 
 static void func_opt(struct options *opts, const char *name)
@@ -77,7 +91,7 @@ void options_parse(struct options *opts, int argc, char **argv)
     opt_index = 0;
 
     while (1) {
-        c = getopt_long(argc, argv, "f:hg:o:vW:", long_opts, &opt_index);
+        c = getopt_long(argc, argv, "f:hg:o:vW:X:", long_opts, &opt_index);
         if (c == -1)
             break;
 
@@ -100,6 +114,9 @@ void options_parse(struct options *opts, int argc, char **argv)
             exit(0);
         case 'W':
             warn_opt(opts, optarg);
+            break;
+        case 'X':
+            extra_opt(opts, optarg);
             break;
         }
     }
@@ -127,7 +144,8 @@ void usage()
            "  -ffold-constants      pre-calculate constant operations\n"
            "  -fcomment-asm         add comments to the generated assembly\n"
            "  -fcmp-literal         optimize comparing with literals\n"
-           "  -fnode-tree           show the parsed node tree\n");
+           "  -fnode-tree           show the parsed node tree\n"
+           "  -Xshow-allocs         show allocations (debug build only)\n");
 
     fputc('\n', stdout);
 }

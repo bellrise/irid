@@ -27,6 +27,8 @@ int main(int argc, char **argv)
     options_parse(&opts, argc, argv);
     options_add_missing_opts(&opts);
 
+    global_ac->show_allocs = opts.x_show_allocs;
+
     /* Split file into tokens. */
 
     tokens = tokens_new();

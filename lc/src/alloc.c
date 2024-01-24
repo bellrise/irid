@@ -51,7 +51,8 @@ void allocator_dump(struct allocator *self)
     printf("ac_total: %zu\n", total);
 }
 
-void *ac_alloc(struct allocator *self, size_t bytes)
+void *ac_alloc_impl(struct allocator *self, size_t bytes, const char *file,
+                    int line)
 {
     struct ac_allocation *alloc;
 
@@ -66,6 +67,9 @@ void *ac_alloc(struct allocator *self, size_t bytes)
     self->allocs[self->size++] = alloc;
 
     memset(alloc->area, 0, alloc->size);
+
+    if (self->show_allocs)
+        debug("ac: A %zu %s:%d", bytes, file, line);
 
     return alloc->area;
 }

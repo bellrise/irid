@@ -34,6 +34,8 @@ struct options
     bool f_cmp_literal;
     bool f_node_tree;
     bool f_fold_constants;
+
+    bool x_show_allocs;
 };
 
 void options_set_defaults(struct options *opts);
@@ -228,10 +230,15 @@ struct allocator
     struct ac_allocation **allocs;
     size_t size;
     size_t space;
+    bool show_allocs;
 };
 
-void *ac_alloc(struct allocator *, size_t bytes);
+void *ac_alloc_impl(struct allocator *, size_t bytes, const char *file,
+                    int line);
 void *ac_realloc(struct allocator *, void *addr, size_t bytes);
+
+#define ac_alloc(ALLOCATOR, BYTES)                                             \
+    ac_alloc_impl(ALLOCATOR, BYTES, __FILE__, __LINE__)
 
 void allocator_init(struct allocator *);
 void allocator_free_all(struct allocator *);
