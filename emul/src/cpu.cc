@@ -503,7 +503,7 @@ void cpu::cpucall_devicepoll()
         if (m_devices[i].id != m_reg.r1)
             continue;
 
-        m_reg.h2 = m_devices[i].poll(m_devices[i]);
+        m_reg.h2 = (bool) m_devices[i].poll(m_devices[i]);
         break;
     }
 }

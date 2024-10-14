@@ -6,7 +6,6 @@
 #include <ctype.h>
 #include <poll.h>
 #include <queue>
-#include <stdio.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -143,7 +142,7 @@ static bool console_poll(device& self)
     if (poll(&poll_rq, 1, 0) == -1)
         return false;
 
-    return poll_rq.revents & POLLIN;
+    return (bool) (poll_rq.revents & POLLIN);
 }
 
 static void console_close(device& self)

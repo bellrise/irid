@@ -211,7 +211,7 @@ struct device
 {
     u16 id;
     u16 interrupt_ptr;
-    const std::string& name;
+    std::string name;
 
     /* For device state. */
     void *state;
