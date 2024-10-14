@@ -19,7 +19,7 @@ BT  ?= debug
 
 ifeq ($(BT), debug)
 	CFLAGS += -O0 -ggdb -DDEBUG=1
-	LDFLAGS +=
+	LDFLAGS += -fsanitize=address
 else ifeq ($(BT), release)
 	CFLAGS += -O3
 else

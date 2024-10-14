@@ -21,3 +21,5 @@ run: all
 clean:
 	rm -f test.i
 	rm -rf build
+
+.PHONY : test.i

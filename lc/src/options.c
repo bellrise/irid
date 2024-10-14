@@ -165,7 +165,7 @@ void options_add_missing_opts(struct options *opts)
 
     memset(buf, 0, NAME_MAX);
 
-    input_copy = string_copy_z(input_copy);
+    input_copy = string_copy_z(opts->input);
     p = basename(input_copy);
 
     strcpy(buf, p);

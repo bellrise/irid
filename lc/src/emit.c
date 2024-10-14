@@ -7,9 +7,9 @@
 
 static void store_value_into_register(struct emitter *self, int register_id,
                                       struct value *value);
-static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct local *local, int offset,
-                                      struct value *index);
+static void store_register_into_local(struct emitter *self, int result_register,
+                                      int scratch_register, struct local *local,
+                                      int offset, struct value *index);
 
 static void emit_func_preamble(struct emitter *self, struct block_func *func)
 {
@@ -50,6 +50,8 @@ static const char *register_name(int register_id)
     const char *names[] = {
         [R_R0] = "r0", [R_R1] = "r1", [R_R2] = "r2", [R_R3] = "r3",
         [R_R4] = "r4", [R_R5] = "r5", [R_R6] = "r6", [R_R7] = "r7",
+        [R_H0] = "h0", [R_H1] = "h1", [R_H2] = "h2", [R_H3] = "h3",
+        [R_L0] = "l0", [R_L1] = "l1", [R_L2] = "l2", [R_L3] = "l3",
     };
 
     return names[register_id];
@@ -115,14 +117,15 @@ static void emit_op(struct emitter *self, int result_register,
         }
     }
 
-    /* We are on a mission now. Our goal is to place the calculated value into
-       the result register. First, we calculate the right side of the operation
-       and push that value onto the stack. */
+    /* We are on a mission now. Our goal is to place the calculated value
+       into the result register. First, we calculate the right side of the
+       operation and push that value onto the stack. */
 
     store_value_into_register(self, result_register, op->right);
     push(self, result_register);
 
-    /* Calculate the left side, and pop the calculated right side into r4. */
+    /* Calculate the left side, and pop the calculated right side into r4.
+     */
 
     store_value_into_register(self, result_register, op->left);
     pop(self, R_R4);
@@ -151,7 +154,8 @@ static void store_value_addr_into_register(struct emitter *self,
                                            int register_id, struct value *value)
 {
     if (value->value_type == VALUE_LOCAL) {
-        /* If we want to deref, first load the pointer into a register. */
+        /* If we want to deref, first load the pointer into a register.
+         */
         if (value->deref) {
             fprintf(self->out, "    mov r4, bp\n");
             fprintf(self->out, "    sub r4, %d\n",
@@ -189,9 +193,9 @@ static void store_value_into_register(struct emitter *self, int register_id,
              || value->value_type == VALUE_GLOBAL) {
         store_value_addr_into_register(self, R_R4, value);
 
-        /* In the case that the value decays into a pointer, store the pointer
-           value to the register, skipping the `load` part (which loads the
-           value at the pointer).  */
+        /* In the case that the value decays into a pointer, store the
+           pointer value to the register, skipping the `load` part
+           (which loads the value at the pointer).  */
 
         if (value->decay_into_pointer)
             fprintf(self->out, "    mov %s, r4\n", register_name(register_id));
@@ -216,17 +220,18 @@ static void store_value_into_register(struct emitter *self, int register_id,
     }
 
     else if (value->value_type == VALUE_INDEX) {
-        /* We can do indexing in 2 different ways. We can either offset from a
-           given pointer, or offset from the value itself (this is the case in
-           arrays). */
+        /* We can do indexing in 2 different ways. We can either offset
+           from a given pointer, or offset from the value itself (this
+           is the case in arrays). */
 
         /* Calculate the offset into the pointer first. */
 
         store_value_into_register(self, R_R6, value->index_offset);
         fprintf(self->out, "    mul r6, %d\n", value->index_elem_size);
 
-        /* If we have a pointer, the base pointer is the value of the pointer.
-           Otherwise, the location of the variable is the base pointer. */
+        /* If we have a pointer, the base pointer is the value of the
+           pointer. Otherwise, the location of the variable is the base
+           pointer. */
 
         if (value->deref)
             store_value_into_register(self, R_R4, value->index_var);
@@ -237,8 +242,8 @@ static void store_value_into_register(struct emitter *self, int register_id,
         fprintf(self->out, "    add r4, r6\n");
         fprintf(self->out, "    load %s, r4\n", register_name(register_id));
 
-        /* If the value we want to store is a single byte, remember to cut off
-           the high-order byte. */
+        /* If the value we want to store is a single byte, remember to
+           cut off the high-order byte. */
 
         if (value->index_elem_size == 1) {
             fprintf(self->out, "    and %s, 0xff\n",
@@ -251,32 +256,68 @@ static void store_value_into_register(struct emitter *self, int register_id,
     }
 }
 
-static void store_register_into_local(struct emitter *self, int register_id,
-                                      struct local *local, int offset,
-                                      struct value *index)
+static void store_register_into_local(struct emitter *self, int result_register,
+                                      int scratch_register, struct local *local,
+                                      int offset, struct value *index)
 {
     int access_offset;
 
     if (local->is_global) {
-        fprintf(self->out, "    mov r4, _G_%s\n", local->name);
-        fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+        fprintf(self->out, "    mov %s, _G_%s\n",
+                register_name(scratch_register), local->name);
+        fprintf(self->out, "    store %s, %s\n", register_name(result_register),
+                register_name(scratch_register));
         return;
     }
 
     access_offset = local->local_block->emit_offset - offset;
 
     if (index) {
-        store_value_into_register(self, R_R4, index);
-        fprintf(self->out, "    mul r4, %d\n", type_element_size(local->type));
-        fprintf(self->out, "    add r4, bp\n");
-        fprintf(self->out, "    sub r4, %d\n", access_offset);
-        fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+        if (local->type->type == TYPE_ARRAY) {
+            store_value_into_register(self, scratch_register, index);
+            fprintf(self->out, "    mul %s, %d\n",
+                    register_name(scratch_register),
+                    type_element_size(local->type));
+            fprintf(self->out, "    add %s, bp\n",
+                    register_name(scratch_register));
+            fprintf(self->out, "    sub %s, %d\n",
+                    register_name(scratch_register), access_offset);
+        }
+
+        else if (local->type->type == TYPE_POINTER) {
+            push(self, result_register);
+            store_value_into_register(self, result_register, index);
+            fprintf(self->out, "    mul %s, %d\n",
+                    register_name(result_register),
+                    type_element_size(local->type));
+            fprintf(self->out, "    mov %s, bp\n",
+                    register_name(scratch_register));
+            fprintf(self->out, "    sub %s, %d\n",
+                    register_name(scratch_register), access_offset);
+            fprintf(self->out, "    load %s, %s\n",
+                    register_name(scratch_register),
+                    register_name(scratch_register));
+            fprintf(self->out, "    add %s, %s\n",
+                    register_name(scratch_register),
+                    register_name(result_register));
+            pop(self, result_register);
+        }
+
+        else {
+            die("store-to-local (%s) with offset on variable of type %s",
+                local->name, type_repr(local->type));
+        }
+
+        fprintf(self->out, "    store %s, %s\n", register_name(result_register),
+                register_name(scratch_register));
         return;
     }
 
-    fprintf(self->out, "    mov r4, bp\n");
-    fprintf(self->out, "    sub r4, %d\n", access_offset);
-    fprintf(self->out, "    store %s, r4\n", register_name(register_id));
+    fprintf(self->out, "    mov %s, bp\n", register_name(scratch_register));
+    fprintf(self->out, "    sub %s, %d\n", register_name(scratch_register),
+            access_offset);
+    fprintf(self->out, "    store %s, %s\n", register_name(result_register),
+            register_name(scratch_register));
 }
 
 static void emit_store(struct emitter *self, struct block_store *store)
@@ -285,8 +326,8 @@ static void emit_store(struct emitter *self, struct block_store *store)
         fprintf(self->out, "    ; store %s\n", store->local->name);
 
     store_value_into_register(self, R_R5, &store->value);
-    store_register_into_local(self, R_R5, store->local, store->store_offset,
-                              store->index);
+    store_register_into_local(self, R_R5, R_R4, store->local,
+                              store->store_offset, store->index);
 }
 
 static void emit_call(struct emitter *self, struct block_call *func)
@@ -355,15 +396,15 @@ static void emit_store_return(struct emitter *self,
 static void emit_store_result(struct emitter *self,
                               struct block_store *store_return)
 {
-    store_register_into_local(self, R_R0, store_return->local,
+    store_register_into_local(self, R_R0, R_R4, store_return->local,
                               store_return->store_offset, NULL);
 }
 
 static void emit_store_arg(struct emitter *self,
                            struct block_store_arg *store_arg)
 {
-    store_register_into_local(self, R_R0 + store_arg->arg, store_arg->local, 0,
-                              NULL);
+    store_register_into_local(self, R_R0 + store_arg->arg, R_R4,
+                              store_arg->local, 0, NULL);
 }
 
 static void emit_func(struct emitter *self, struct block_func *func)
